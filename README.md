@@ -4,6 +4,8 @@
 
 无依赖、无构建步骤 —— 双击 `index.html` 就能用。
 
+![定点演算纸界面：操作数输入与位翻转、结果机器码、算法选择与多算法对照表](docs/preview.png)
+
 ## 功能
 
 - **三种模式**：乘法、除法、码制（原码 / 反码 / 补码互转）
@@ -46,6 +48,8 @@ build/
   verify.mjs          产物静态校验：自包含性、DOM id、图标与符号完整性
   sweep-compare.mjs   与原 TypeScript 实现的对拍脚本
   dom.test.mjs        jsdom 下的 UI 交互测试
+docs/
+  preview.png         README 中的界面截图
 ```
 
 ## 开发与校验
@@ -73,6 +77,13 @@ node --experimental-strip-types build/sweep-compare.mjs
 | `verify.mjs` | all static checks passed |
 | `dom.test.mjs` | ALL UI CHECKS PASSED |
 | `sweep-compare.mjs` | 与原 TypeScript 实现的深层输出差异 **0** |
+
+`docs/preview.png` 是用无头浏览器直接渲染 `index.html` 得到的实拍截图，改完界面后可以这样重新生成：
+
+```bash
+msedge --headless=new --hide-scrollbars --force-device-scale-factor=1.5 \
+  --window-size=1280,1160 --screenshot=docs/preview.png index.html
+```
 
 ## 实现说明
 
