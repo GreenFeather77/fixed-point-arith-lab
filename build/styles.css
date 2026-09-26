@@ -535,15 +535,8 @@ ol {
   transition: transform 150ms, background-color 150ms;
 }
 
-.bit-point,
-.bit-sep {
+.bit-point {
   padding: 0 0.125rem;
-  color: var(--muted);
-}
-
-.bit-extra {
-  box-shadow: inset 0 0 0 1px var(--border-strong);
-  border-radius: var(--radius-xs);
   color: var(--muted);
 }
 
@@ -1063,27 +1056,144 @@ ol {
   height: 1rem;
 }
 
-.steps-list {
+/* The trace is a table the way the textbooks print it: 部分积 | 乘数 | 操作说明,
+   one row per machine step. The first two columns hold digit fields, so they
+   shrink to their content and the note column takes what is left. */
+.trace-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.trace-table th {
+  padding: 0 0.75rem 0.5rem 0;
+  text-align: left;
+  font-weight: 500;
+  font-size: 0.75rem;
+  color: var(--subtle);
+}
+
+.trace-cell {
+  padding: 0.5rem 0.75rem 0.5rem 0;
+  vertical-align: top;
+  border-top: 1px solid var(--border);
+}
+
+.trace-table th:last-child,
+.trace-cell:last-child {
+  padding-right: 0;
+}
+
+.trace-left,
+.trace-mid {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.trace-note {
+  min-width: 15rem;
+}
+
+/* Shading marks the rows that carry the running state: the initial value and
+   every post-shift value, same numbers the textbooks shade. */
+.step.is-state .trace-left {
+  background: rgb(32 71 64 / 0.05);
+}
+
+.step.is-active .trace-cell {
+  background: rgb(32 71 64 / 0.07);
+}
+
+.trace-empty {
+  font-family: var(--font-mono);
+  color: var(--subtle);
+}
+
+/* 码制转换's left column: one representation per line, matched to the height of
+   the digit field beside it so the two columns stay in step. */
+.trace-name {
   display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  align-items: center;
+  height: 1.75rem;
+  font-size: 0.75rem;
+  color: var(--muted);
 }
 
-.step {
-  border-radius: var(--radius-md);
-  background: var(--surface-2);
-  padding: 0.75rem;
-  box-shadow: inset 0 0 0 1px var(--border);
+.trace-line {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
-@media (min-width: 640px) {
-  .step {
-    padding: 1rem;
-  }
+/* The addend sits above the sum with a rule under it, as in the textbook. */
+.trace-line.is-addend {
+  padding-bottom: 0.25rem;
+  margin-bottom: 0.25rem;
+  border-bottom: 1px solid var(--border-strong);
 }
 
-.step.is-active {
-  box-shadow: inset 0 0 0 1px rgb(32 71 64 / 0.4);
+.trace-sign {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  color: var(--muted);
+}
+
+.field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.field.is-dim {
+  opacity: 0.45;
+}
+
+.field-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.75rem;
+  min-width: 1.375rem;
+  padding: 0 0.25rem;
+  border-radius: var(--radius-xs);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.field-cell.is-extra {
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.field-cell.is-new {
+  box-shadow: 0 0 0 1.5px rgb(32 71 64 / 0.4);
+}
+
+/* Quotient digits that are not fixed yet: keep the column's shape without
+   pretending the digit is known. */
+.field-cell.is-pending {
+  border: 1px dashed var(--border-strong);
+  background: transparent;
+}
+
+/* The digits that slid out of the accumulator into the multiplier. Grouping
+   them behind a tint and nudging the rest aside reproduces the space the
+   textbook leaves between "1" and "0.1101". */
+.field-in {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.1875rem 0.25rem;
+  margin: -0.1875rem 0.125rem -0.1875rem 0;
+  border-radius: var(--radius-xs);
+  background: rgb(61 79 92 / 0.12);
+}
+
+.field-point {
+  padding: 0 0.0625rem;
+  font-family: var(--font-mono);
+  color: var(--muted);
 }
 
 .step-meta {
@@ -1152,125 +1262,25 @@ ol {
   color: var(--muted);
 }
 
-.step-regs {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+/* Stepping onto a shift row replays the migration once; expanded mode stays
+   still so a wall of rows does not animate. */
+.step.is-active.is-shift .field-in {
+  animation: shift-in 260ms ease-out;
 }
 
-.step-reg {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-@media (min-width: 640px) {
-  .step-reg {
-    flex-direction: row;
-    align-items: center;
-    gap: 0.75rem;
-  }
-}
-
-.step-reg-name {
-  width: 7rem;
-  flex-shrink: 0;
-  font-size: 0.75rem;
-  color: var(--subtle);
-}
-
-/* Shift steps: the register is shown after the shift, so outline the cells the
-   shift filled in and park the bits that fell off the end beside the strip. */
-.shift-lane {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.shift-lane .bit-strip {
-  flex: 0 1 auto;
-  min-width: 0;
-}
-
-.bit-cell.is-fill .bit {
-  outline: 1.5px dashed rgb(61 79 92 / 0.75);
-  outline-offset: 1px;
-}
-
-.shift-arrow {
-  flex-shrink: 0;
-  font-family: var(--font-mono);
-  font-size: 0.875rem;
-  line-height: 1;
-  color: var(--info);
-}
-
-.shift-exit {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.125rem 0.375rem;
-  border-radius: var(--radius-xs);
-  background: rgb(61 79 92 / 0.08);
-}
-
-.shift-exit-label {
-  font-size: 0.6875rem;
-  color: var(--subtle);
-}
-
-.shift-exit-bit {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 1.75rem;
-  min-width: 1.5rem;
-  border-radius: var(--radius-xs);
-  box-shadow: inset 0 0 0 1px var(--border);
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: var(--subtle);
-}
-
-.shift-exit-bit.is-one {
-  background: var(--bit-one);
-  color: var(--primary-fg);
-  opacity: 0.6;
-}
-
-/* Stepping onto a shift step replays the movement once; expanded mode stays
-   still so a wall of steps does not animate. */
-.step.is-active .shift-lane.is-right .bit-strip {
-  animation: shift-settle-right 260ms ease-out;
-}
-
-.step.is-active .shift-lane.is-left .bit-strip {
-  animation: shift-settle-left 260ms ease-out;
-}
-
-@keyframes shift-settle-right {
+@keyframes shift-in {
   from {
-    transform: translateX(0.6rem);
+    transform: translateX(-0.5rem);
+    opacity: 0.4;
   }
   to {
     transform: translateX(0);
-  }
-}
-
-@keyframes shift-settle-left {
-  from {
-    transform: translateX(-0.6rem);
-  }
-  to {
-    transform: translateX(0);
+    opacity: 1;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .step.is-active .shift-lane .bit-strip {
+  .step.is-active.is-shift .field-in {
     animation: none;
   }
 }

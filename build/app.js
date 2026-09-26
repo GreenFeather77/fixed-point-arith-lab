@@ -109,16 +109,14 @@ function esc(s) {
 
 /* ---------------------------------------------------------------- bit strip */
 
-function bitStrip(bits, point = 1, extra, size = "md", onToggle, opts) {
+function bitStrip(bits, point = 1, size = "md", onToggle) {
   const wrap = el("div", `bit-strip bs-${size}`);
   bits.forEach((bit, i) => {
     const isSign = i < point;
-    const isFill = Boolean(opts) && i >= opts.fillFrom && i < opts.fillTo;
-    const title = isFill ? `移位补入的 ${bit}` : isSign ? "符号位" : `2⁻${i - point + 1}`;
+    const title = isSign ? "符号位" : `2⁻${i - point + 1}`;
     const cls = `bit ${bit === 1 ? "bit-one" : "bit-zero"}${isSign ? " bit-sign" : ""}`;
     const inner = `<span class="${cls}" title="${title}">${bit}</span>`;
     const cell = el("span", "bit-cell");
-    if (isFill) cell.classList.add("is-fill");
     if (onToggle) {
       const btn = el("button", "bit-btn", inner);
       btn.type = "button";
@@ -136,12 +134,6 @@ function bitStrip(bits, point = 1, extra, size = "md", onToggle, opts) {
     }
     wrap.appendChild(cell);
   });
-  if (extra !== undefined) {
-    wrap.appendChild(el("span", "bit-sep", "|"));
-    wrap.appendChild(
-      el("span", `bit bit-extra ${extra === 1 ? "bit-one" : ""}`, String(extra)),
-    );
-  }
   return wrap;
 }
 
@@ -338,7 +330,7 @@ function renderOperands(derived) {
 
     nodes.pad.innerHTML = "";
     nodes.pad.appendChild(
-      bitStrip(padBits, 1, undefined, "lg", (i) => {
+      bitStrip(padBits, 1, "lg", (i) => {
         const next = padBits.map((b, idx) => (idx === i ? b ^ 1 : b));
         const str = bitsToInputString(next, state.encoding);
         if (side === "x") state.xRaw = str;
@@ -589,72 +581,163 @@ function paperLine(bits, prefix, dim, emphasize) {
 
 /* ------------------------------------------------------------------ steps */
 
-// A shift step only shows the register *after* the shift, which leaves the
-// reader to diff two rows by eye. Comparing against the same register in the
-// previous step lets us mark the cells the shift filled in and park the bits
-// that fell off the end next to the strip. Both widths must match and the bit
-// relation must verify, otherwise we render a plain strip rather than risk a
-// label that lies about what moved.
-function shiftDelta(operation, prevBits, bits) {
-  if (!prevBits || prevBits.length !== bits.length || bits.length < 2) return null;
-  const dir = operation.includes("右移")
-    ? "right"
-    : operation.includes("左移") || operation.includes("≪")
-      ? "left"
-      : null;
-  if (!dir) return null;
-  // Prefer the amount the step names: a strip that happens to look like a 1-bit
-  // shift must not override the 2-bit shift the operation actually performed.
-  const declared = Number((operation.match(/(\d+)\s*位/) || [])[1]);
-  const amounts = Number.isFinite(declared) && declared > 0 ? [declared] : [1, 2];
-  const len = bits.length;
-  for (const amount of amounts) {
-    if (len <= amount) continue;
-    let ok = true;
-    for (let i = 0; i < len; i++) {
-      const src = dir === "right" ? i - amount : i + amount;
-      if (src < 0 || src >= len) continue;
-      if (bits[i] !== prevBits[src]) {
-        ok = false;
-        break;
-      }
-    }
-    if (!ok) continue;
-    return dir === "right"
-      ? { dir, amount, fillFrom: 0, fillTo: amount, exit: prevBits.slice(len - amount) }
-      : { dir, amount, fillFrom: len - amount, fillTo: len, exit: prevBits.slice(0, amount) };
+// Machine-arithmetic traces are laid out the way the textbooks lay them out:
+// three columns holding the accumulator (部分积 / 余数), the multiplier or
+// quotient, and the operation note. The payoff is on the right shift — the
+// digits that slid out of the accumulator into the multiplier stay in the
+// multiplier column, bunched into a shaded group at the left, and the binary
+// point rides right with them. One row then shows the shift, instead of asking
+// the reader to diff two rows by eye.
+function traceColumns(steps) {
+  const names = steps.flatMap((step) => step.registers.map((r) => r.name));
+  // 码制转换 has no accumulator to shift — its rows just name a representation
+  // and give its bits — so it gets a name/value pair instead of the two register
+  // columns the machine algorithms use.
+  if (names.some((nm) => /原码|反码|补码|输入/.test(nm))) {
+    return { family: "convert", left: null, mid: null, leftTitle: "表示", midTitle: "数值" };
   }
-  return null;
+  const isDiv = names.some((nm) => /余数|\[R\]/.test(nm));
+  return isDiv
+    ? { family: "div", left: /余数|\[R\]/, mid: /商|\[Q\]/, leftTitle: "余数", midTitle: "商" }
+    : { family: "mul", left: /部分积|\[P\]/, mid: /乘数|\[Y\]/, leftTitle: "部分积", midTitle: "乘数" };
 }
 
-function shiftRow(reg, delta) {
-  const row = el("div", "step-reg is-shift");
-  row.appendChild(el("span", "mono step-reg-name", esc(reg.name)));
+function pickRegister(registers, pattern) {
+  return registers.find((r) => pattern.test(r.name));
+}
 
-  const lane = el("div", `shift-lane is-${delta.dir}`);
-  const strip = bitStrip(reg.bits, reg.point, reg.extra, "sm", undefined, {
-    fillFrom: delta.fillFrom,
-    fillTo: delta.fillTo,
+// Digits a shift step moves out of the accumulator into the multiplier. Only
+// right shifts migrate — a division's 余数左移 moves bits the other way, and
+// counting it would shade the wrong cells.
+function shiftWidth(step) {
+  const m = /右移\s*(\d+)\s*位/.exec(step.operation);
+  return m ? Number(m[1]) : 0;
+}
+
+function fieldCells(reg) {
+  const cells = reg.bits.map((bit) => ({ bit, extra: false }));
+  if (reg.extra !== undefined) cells.push({ bit: reg.extra, extra: true });
+  return cells;
+}
+
+// A register drawn as a digit field. `migrated` counts the digits already
+// shifted in from the accumulator: they form a shaded group at the left, and
+// the binary point is placed after them rather than at its original offset, so
+// the field reads as the multiplier with its point sliding right.
+function traceField(reg, opts) {
+  const o = opts || {};
+  const migrated = Math.min(o.migrated || 0, reg.bits.length);
+  const cells = fieldCells(reg);
+  const pointAfter = reg.point > 0 ? reg.point + migrated - 1 : -1;
+  // A point landing past the last digit would dangle off the end of the field.
+  const showPoint = pointAfter >= 0 && pointAfter < cells.length - 1;
+
+  const wrap = el("span", `field mono${o.dim ? " is-dim" : ""}`);
+  const group = migrated > 0 ? el("span", "field-in") : null;
+  if (group) wrap.appendChild(group);
+
+  cells.forEach((c, i) => {
+    const cell = el("span", `field-cell bit ${c.bit === 1 ? "bit-one" : "bit-zero"}`, String(c.bit));
+    if (c.extra) cell.classList.add("is-extra");
+    if (i === o.newIndex) cell.classList.add("is-new");
+    (group && i < migrated ? group : wrap).appendChild(cell);
+    if (showPoint && i === pointAfter) wrap.appendChild(el("span", "field-point", "."));
   });
+  // Division's quotient column is stored in two widths — the whole register on
+  // some rows, only the digits fixed so far on others. Pad the short rows so the
+  // column keeps one shape down the table.
+  for (let i = 0; i < (o.pad || 0); i++) wrap.appendChild(el("span", "field-cell is-pending"));
+  return wrap;
+}
 
-  const exit = el("span", "shift-exit");
-  exit.appendChild(el("span", "shift-exit-label", "移出"));
-  delta.exit.forEach((bit) => {
-    exit.appendChild(el("span", `shift-exit-bit${bit === 1 ? " is-one" : ""}`, String(bit)));
-  });
+function traceLine(reg, opts) {
+  const o = opts || {};
+  const line = el("div", `trace-line${o.addend ? " is-addend" : ""}`);
+  if (o.sign) line.appendChild(el("span", "trace-sign", o.sign));
+  line.appendChild(traceField(reg, o));
+  return line;
+}
 
-  const arrow = el("span", "shift-arrow", delta.dir === "right" ? "→" : "←");
-  const order = delta.dir === "right" ? [strip, arrow, exit] : [exit, arrow, strip];
-  order.forEach((node) => lane.appendChild(node));
-  row.appendChild(lane);
+// A step carries the sum but not the addend, so recover the addend from the
+// difference against the accumulator in the previous step. Widths have to
+// agree; when they don't (division widens its remainder mid-step) the row just
+// shows the result instead of inventing an addend line.
+function addendOf(prevBits, curBits) {
+  if (!prevBits || prevBits.length !== curBits.length) return null;
+  const width = curBits.length;
+  const delta = (bitsToInt(curBits) - bitsToInt(prevBits) + 2 ** width) % 2 ** width;
+  return intToBits(delta, width);
+}
+
+const ARITH_KINDS = new Set(["add", "sub", "zero"]);
+
+function phaseLabel(step) {
+  return step.phase === "init" ? "初值" : step.phase === "done" ? "结果" : `步 ${step.i}`;
+}
+
+function traceRow(step, ctx) {
+  const cols = ctx.cols;
+  // Rows that carry the running state — the initial value and each post-shift
+  // value — get the shading the textbooks put behind the same numbers.
+  const carried = step.phase === "init" || step.kind === "shift";
+  const row = el(
+    "tr",
+    `step is-${step.kind}${ctx.active ? " is-active" : ""}${carried ? " is-state" : ""}`,
+  );
+
+  const leftCell = el("td", "trace-cell trace-left");
+  const midCell = el("td", "trace-cell trace-mid");
+
+  if (cols.family === "convert") {
+    // One line per representation, so 原码 / 反码 / 补码 stack in the same order
+    // in both columns.
+    step.registers.forEach((reg) => {
+      leftCell.appendChild(el("div", "trace-name", esc(reg.name)));
+      midCell.appendChild(traceLine(reg));
+    });
+  } else if (ctx.left) {
+    if (ctx.addend) {
+      leftCell.appendChild(traceLine({ ...ctx.left, bits: ctx.addend }, { sign: "+", addend: true }));
+    }
+    leftCell.appendChild(traceLine(ctx.left));
+  } else {
+    leftCell.appendChild(el("span", "trace-empty", "—"));
+  }
+
+  if (cols.family !== "convert" && ctx.mid) {
+    midCell.appendChild(
+      traceField(ctx.mid, {
+        migrated: ctx.migrated,
+        newIndex: ctx.newIndex,
+        pad: ctx.pad,
+      }),
+    );
+  }
+
+  const noteCell = el("td", "trace-cell trace-note");
+  const meta = el("div", "step-meta");
+  meta.appendChild(el("span", "mono step-phase", phaseLabel(step)));
+  meta.appendChild(
+    el("span", `kind ${KIND_CLASS[step.kind] ?? "k-info"}`, KIND_LABEL[step.kind] ?? step.kind),
+  );
+  noteCell.appendChild(meta);
+  noteCell.appendChild(el("div", "step-op", esc(step.operation)));
+  if (step.judge !== "—") noteCell.appendChild(el("div", "step-judge", esc(step.judge)));
+  noteCell.appendChild(el("p", "step-note", esc(step.note)));
+
+  row.appendChild(leftCell);
+  row.appendChild(midCell);
+  row.appendChild(noteCell);
   return row;
 }
 
 function stepsSection(result) {
   const section = el("section", "card steps-card");
-  const stepCount = result.steps.length;
+  const steps = result.steps;
+  const cols = traceColumns(steps);
+  const stepCount = steps.length;
   const safeIndex = Math.min(state.stepIndex, Math.max(0, stepCount - 1));
-  const visible = state.showAll ? result.steps : result.steps.slice(0, safeIndex + 1);
+  const visible = state.showAll ? steps : steps.slice(0, safeIndex + 1);
 
   const head = el("div", "steps-head");
   const left = el("div");
@@ -704,55 +787,71 @@ function stepsSection(result) {
   head.appendChild(tools);
   section.appendChild(head);
 
-  const list = el("div", "steps-list");
-  // Carries each register's bits forward so a shift step can be diffed against
-  // the step before it.
-  const prevRegs = new Map();
+  const midWidth = Math.max(
+    0,
+    ...steps.map((step) => {
+      const reg = cols.mid ? pickRegister(step.registers, cols.mid) : null;
+      return reg ? fieldCells(reg).length : 0;
+    }),
+  );
+
+  const headRow = el("tr");
+  headRow.appendChild(el("th", "trace-cell trace-left", cols.leftTitle));
+  headRow.appendChild(el("th", "trace-cell trace-mid", cols.midTitle));
+  headRow.appendChild(el("th", "trace-cell trace-note", "操作说明"));
+  const thead = el("thead");
+  thead.appendChild(headRow);
+
+  const tbody = el("tbody");
+  // Digits shifted out of the accumulator so far, and the quotient value as of
+  // the row above — both only move on the rows that actually shift or 上商.
+  let migrated = 0;
+  let prevLeft = null;
+  let prevQuotient = 0;
   visible.forEach((step, idx) => {
-    const active = !state.showAll && idx === visible.length - 1;
-    const article = el("article", `step${active ? " is-active" : ""}`);
-    const meta = el("div", "step-meta");
-    meta.appendChild(
-      el(
-        "span",
-        "mono step-phase",
-        step.phase === "init" ? "初值" : step.phase === "done" ? "结果" : `步 ${step.i}`,
-      ),
-    );
-    meta.appendChild(
-      el("span", `kind ${KIND_CLASS[step.kind] ?? "k-info"}`, KIND_LABEL[step.kind] ?? step.kind),
-    );
-    meta.appendChild(el("span", "mono step-op", esc(step.operation)));
-    if (step.judge !== "—") meta.appendChild(el("span", "step-judge", esc(step.judge)));
-    article.appendChild(meta);
-    article.appendChild(el("p", "step-note", esc(step.note)));
+    if (cols.family === "mul" && step.kind === "shift") migrated += shiftWidth(step);
 
-    const regs = el("div", "step-regs");
-    // A shift step is decorated only when every register in it agrees with the
-    // shift the operation names. A register that sat the step out — as the
-    // quotient does in restoring division's 余数左移 — would otherwise pick up a
-    // "移出" label for bits that never moved.
-    const deltas =
-      step.kind === "shift"
-        ? step.registers.map((reg) => shiftDelta(step.operation, prevRegs.get(reg.name), reg.bits))
-        : [];
-    const shifted = deltas.length > 0 && deltas.every(Boolean);
-    step.registers.forEach((reg, i) => {
-      if (shifted) {
-        regs.appendChild(shiftRow(reg, deltas[i]));
-        return;
-      }
-      const row = el("div", "step-reg");
-      row.appendChild(el("span", "mono step-reg-name", esc(reg.name)));
-      row.appendChild(bitStrip(reg.bits, reg.point, reg.extra, "sm"));
-      regs.appendChild(row);
-    });
-    article.appendChild(regs);
-    list.appendChild(article);
+    const leftReg = cols.left ? pickRegister(step.registers, cols.left) || null : null;
+    const midReg = cols.mid ? pickRegister(step.registers, cols.mid) || null : null;
+    const width = midReg ? fieldCells(midReg).length : 0;
 
-    step.registers.forEach((reg) => prevRegs.set(reg.name, reg.bits));
+    // Multiplication rows show the addend above the sum. A division row's
+    // "addend" would be the two's complement of |Y|, which reads as nonsense, so
+    // those rows show the remainder alone.
+    const addend =
+      cols.family === "mul" && leftReg && prevLeft && ARITH_KINDS.has(step.kind)
+        ? addendOf(prevLeft, leftReg.bits)
+        : null;
+
+    let newIndex = -1;
+    if (cols.family === "div" && midReg) {
+      const value = bitsToInt(midReg.bits);
+      if (value !== prevQuotient) newIndex = width - 1;
+      prevQuotient = value;
+    }
+
+    tbody.appendChild(
+      traceRow(step, {
+        active: !state.showAll && idx === visible.length - 1,
+        cols,
+        left: leftReg,
+        addend,
+        mid: midReg,
+        migrated: cols.family === "mul" ? migrated : 0,
+        newIndex,
+        pad: midReg ? Math.max(0, midWidth - width) : 0,
+      }),
+    );
+
+    if (leftReg) prevLeft = leftReg.bits;
   });
-  section.appendChild(list);
+
+  const table = el("table", "trace-table");
+  table.appendChild(thead);
+  table.appendChild(tbody);
+  const scroller = el("div", "scroll-x");
+  scroller.appendChild(table);
+  section.appendChild(scroller);
   return section;
 }
 
