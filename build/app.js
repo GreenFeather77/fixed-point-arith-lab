@@ -109,14 +109,16 @@ function esc(s) {
 
 /* ---------------------------------------------------------------- bit strip */
 
-function bitStrip(bits, point = 1, extra, size = "md", onToggle) {
+function bitStrip(bits, point = 1, extra, size = "md", onToggle, opts) {
   const wrap = el("div", `bit-strip bs-${size}`);
   bits.forEach((bit, i) => {
     const isSign = i < point;
-    const title = isSign ? "符号位" : `2⁻${i - point + 1}`;
+    const isFill = Boolean(opts) && i >= opts.fillFrom && i < opts.fillTo;
+    const title = isFill ? `移位补入的 ${bit}` : isSign ? "符号位" : `2⁻${i - point + 1}`;
     const cls = `bit ${bit === 1 ? "bit-one" : "bit-zero"}${isSign ? " bit-sign" : ""}`;
     const inner = `<span class="${cls}" title="${title}">${bit}</span>`;
     const cell = el("span", "bit-cell");
+    if (isFill) cell.classList.add("is-fill");
     if (onToggle) {
       const btn = el("button", "bit-btn", inner);
       btn.type = "button";
@@ -587,6 +589,67 @@ function paperLine(bits, prefix, dim, emphasize) {
 
 /* ------------------------------------------------------------------ steps */
 
+// A shift step only shows the register *after* the shift, which leaves the
+// reader to diff two rows by eye. Comparing against the same register in the
+// previous step lets us mark the cells the shift filled in and park the bits
+// that fell off the end next to the strip. Both widths must match and the bit
+// relation must verify, otherwise we render a plain strip rather than risk a
+// label that lies about what moved.
+function shiftDelta(operation, prevBits, bits) {
+  if (!prevBits || prevBits.length !== bits.length || bits.length < 2) return null;
+  const dir = operation.includes("右移")
+    ? "right"
+    : operation.includes("左移") || operation.includes("≪")
+      ? "left"
+      : null;
+  if (!dir) return null;
+  // Prefer the amount the step names: a strip that happens to look like a 1-bit
+  // shift must not override the 2-bit shift the operation actually performed.
+  const declared = Number((operation.match(/(\d+)\s*位/) || [])[1]);
+  const amounts = Number.isFinite(declared) && declared > 0 ? [declared] : [1, 2];
+  const len = bits.length;
+  for (const amount of amounts) {
+    if (len <= amount) continue;
+    let ok = true;
+    for (let i = 0; i < len; i++) {
+      const src = dir === "right" ? i - amount : i + amount;
+      if (src < 0 || src >= len) continue;
+      if (bits[i] !== prevBits[src]) {
+        ok = false;
+        break;
+      }
+    }
+    if (!ok) continue;
+    return dir === "right"
+      ? { dir, amount, fillFrom: 0, fillTo: amount, exit: prevBits.slice(len - amount) }
+      : { dir, amount, fillFrom: len - amount, fillTo: len, exit: prevBits.slice(0, amount) };
+  }
+  return null;
+}
+
+function shiftRow(reg, delta) {
+  const row = el("div", "step-reg is-shift");
+  row.appendChild(el("span", "mono step-reg-name", esc(reg.name)));
+
+  const lane = el("div", `shift-lane is-${delta.dir}`);
+  const strip = bitStrip(reg.bits, reg.point, reg.extra, "sm", undefined, {
+    fillFrom: delta.fillFrom,
+    fillTo: delta.fillTo,
+  });
+
+  const exit = el("span", "shift-exit");
+  exit.appendChild(el("span", "shift-exit-label", "移出"));
+  delta.exit.forEach((bit) => {
+    exit.appendChild(el("span", `shift-exit-bit${bit === 1 ? " is-one" : ""}`, String(bit)));
+  });
+
+  const arrow = el("span", "shift-arrow", delta.dir === "right" ? "→" : "←");
+  const order = delta.dir === "right" ? [strip, arrow, exit] : [exit, arrow, strip];
+  order.forEach((node) => lane.appendChild(node));
+  row.appendChild(lane);
+  return row;
+}
+
 function stepsSection(result) {
   const section = el("section", "card steps-card");
   const stepCount = result.steps.length;
@@ -642,6 +705,9 @@ function stepsSection(result) {
   section.appendChild(head);
 
   const list = el("div", "steps-list");
+  // Carries each register's bits forward so a shift step can be diffed against
+  // the step before it.
+  const prevRegs = new Map();
   visible.forEach((step, idx) => {
     const active = !state.showAll && idx === visible.length - 1;
     const article = el("article", `step${active ? " is-active" : ""}`);
@@ -662,7 +728,20 @@ function stepsSection(result) {
     article.appendChild(el("p", "step-note", esc(step.note)));
 
     const regs = el("div", "step-regs");
-    step.registers.forEach((reg) => {
+    // A shift step is decorated only when every register in it agrees with the
+    // shift the operation names. A register that sat the step out — as the
+    // quotient does in restoring division's 余数左移 — would otherwise pick up a
+    // "移出" label for bits that never moved.
+    const deltas =
+      step.kind === "shift"
+        ? step.registers.map((reg) => shiftDelta(step.operation, prevRegs.get(reg.name), reg.bits))
+        : [];
+    const shifted = deltas.length > 0 && deltas.every(Boolean);
+    step.registers.forEach((reg, i) => {
+      if (shifted) {
+        regs.appendChild(shiftRow(reg, deltas[i]));
+        return;
+      }
       const row = el("div", "step-reg");
       row.appendChild(el("span", "mono step-reg-name", esc(reg.name)));
       row.appendChild(bitStrip(reg.bits, reg.point, reg.extra, "sm"));
@@ -670,6 +749,8 @@ function stepsSection(result) {
     });
     article.appendChild(regs);
     list.appendChild(article);
+
+    step.registers.forEach((reg) => prevRegs.set(reg.name, reg.bits));
   });
   section.appendChild(list);
   return section;
