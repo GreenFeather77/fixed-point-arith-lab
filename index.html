@@ -1,0 +1,3389 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>定点演算纸</title>
+    <meta name="theme-color" content="#efe6d6" />
+    <meta
+      name="description"
+      content="二进制小数的原码 / 补码乘除法演算，逐步展示寄存器与规则。"
+    />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none'%3E%3Crect width='32' height='32' rx='8' fill='%23204740'/%3E%3Ctext x='16' y='21' text-anchor='middle' font-family='ui-monospace,monospace' font-size='11' font-weight='600' fill='%23F4EFE4'%3E0.1%3C/text%3E%3C/svg%3E"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600;700&display=swap"
+    />
+    <style>
+      /* Styles for the single-file 定点演算纸 build.
+   Mirrors src/styles.css tokens and the Tailwind utilities used by the
+   original React components. */
+
+:root {
+  --font-sans: "Noto Sans SC", "Noto Sans", "Source Han Sans SC", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "Source Han Mono SC", ui-monospace, monospace;
+  --font-display: "Fraunces", "Noto Serif SC", Georgia, serif;
+
+  --bg: #efe6d6;
+  --bg-raised: #f6efe2;
+  --surface: #fbf6ec;
+  --surface-2: #fffdf8;
+  --fg: #1c1710;
+  --muted: #6a6156;
+  --subtle: #8f8578;
+  --border: #ddd2c0;
+  --border-strong: #c9bca8;
+  --primary: #204740;
+  --primary-fg: #f4efe4;
+  --bit-one: #204740;
+  --bit-zero: #d9d0c0;
+  --add: #2d5a38;
+  --sub: #8b3d34;
+  --warn: #7a541c;
+  --danger: #8b3d34;
+  --info: #3d4f5c;
+
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-2xl: 32px;
+
+  --shadow-border:
+    0 0 0 1px rgb(28 23 16 / 0.07),
+    0 1px 2px -1px rgb(28 23 16 / 0.06),
+    0 10px 28px -18px rgb(28 23 16 / 0.18);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  font-family: var(--font-sans);
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(ellipse 80% 50% at 0% -10%, rgb(32 71 64 / 0.07), transparent 50%),
+    radial-gradient(ellipse 60% 40% at 100% 0%, rgb(122 84 28 / 0.05), transparent 45%);
+  color: var(--fg);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  border: 0;
+  background: none;
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+  margin: 0;
+}
+
+p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+/* .operand / .algo-grid set display:flex|grid, which would otherwise win over
+   the UA sheet's [hidden] { display: none } and leave hidden blocks visible. */
+[hidden] {
+  display: none !important;
+}
+
+ol {
+  margin: 0;
+  padding: 0;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.scroll-x {
+  overflow-x: auto;
+}
+
+/* ------------------------------------------------------------------- layout */
+
+.page {
+  margin: 0 auto;
+  display: flex;
+  width: 100%;
+  max-width: 72rem;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem 1rem 2.5rem;
+}
+
+@media (min-width: 640px) {
+  .page {
+    padding: 2.5rem 1.5rem 2.5rem;
+  }
+}
+
+.page-head {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .page-head {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+  }
+}
+
+.head-text {
+  max-width: 36rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.eyebrow {
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  letter-spacing: 0.025em;
+  color: var(--primary);
+}
+
+.page-head h1 {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+@media (min-width: 640px) {
+  .page-head h1 {
+    font-size: 2.25rem;
+  }
+}
+
+.lede {
+  font-size: 0.875rem;
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+@media (min-width: 640px) {
+  .lede {
+    font-size: 1rem;
+  }
+}
+
+.head-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.stepper {
+  display: flex;
+  height: 2.75rem;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: 0 0.375rem;
+  box-shadow: var(--shadow-border);
+}
+
+.stepper-label,
+.stepper-unit {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.stepper-label {
+  padding: 0 0.5rem;
+}
+
+.stepper-unit {
+  padding-right: 0.5rem;
+  color: var(--subtle);
+}
+
+.stepper-value {
+  width: 1.5rem;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.stepper button {
+  display: inline-flex;
+  width: 2.25rem;
+  height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+}
+
+.stepper button:hover {
+  background: var(--bg-raised);
+  color: var(--fg);
+}
+
+.stepper svg,
+.icon-btn svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.icon-btn {
+  display: inline-flex;
+  width: 2.75rem;
+  height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  color: var(--muted);
+}
+
+.icon-btn:hover {
+  background: var(--bg-raised);
+  color: var(--fg);
+}
+
+/* ---------------------------------------------------------------- op tabs */
+
+.op-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.op-tab {
+  display: inline-flex;
+  height: 2.75rem;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: var(--radius-md);
+  padding: 0 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  background: var(--surface);
+  color: var(--muted);
+  box-shadow: var(--shadow-border);
+  transition: background-color 150ms, color 150ms, transform 150ms;
+}
+
+.op-tab svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.op-tab:hover {
+  color: var(--fg);
+}
+
+.op-tab:active {
+  transform: scale(0.96);
+}
+
+.op-tab.is-active {
+  background: var(--primary);
+  color: var(--primary-fg);
+}
+
+/* --------------------------------------------------------------- main grid */
+
+.grid {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 1024px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  }
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  border-radius: var(--radius-2xl);
+  background: var(--surface);
+  padding: 1rem;
+  box-shadow: var(--shadow-border);
+}
+
+@media (min-width: 640px) {
+  .panel {
+    padding: 1.25rem;
+  }
+}
+
+.right-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* ------------------------------------------------------------------ chips */
+
+.encoding-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.chip {
+  height: 2.25rem;
+  border-radius: var(--radius-sm);
+  padding: 0 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: var(--bg-raised);
+  color: var(--muted);
+  transition: background-color 150ms, color 150ms;
+}
+
+.chip:hover {
+  color: var(--fg);
+}
+
+.chip.is-active {
+  background: var(--primary);
+  color: var(--primary-fg);
+}
+
+.hint {
+  font-size: 0.75rem;
+  color: var(--subtle);
+}
+
+/* ---------------------------------------------------------------- operand */
+
+.operand {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.operand-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.field-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.mini-btn {
+  height: 2rem;
+  border-radius: var(--radius-sm);
+  padding: 0 0.5rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.mini-btn:hover {
+  background: var(--bg-raised);
+  color: var(--fg);
+}
+
+.bit-input {
+  height: 3rem;
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  padding: 0 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+  box-shadow: var(--shadow-border);
+  outline: none;
+  transition: box-shadow 150ms;
+}
+
+.bit-input:focus {
+  box-shadow: var(--shadow-border), 0 0 0 3px rgb(32 71 64 / 0.22);
+}
+
+.pad-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.pad-hint {
+  font-size: 0.75rem;
+  color: var(--subtle);
+}
+
+.legend {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--subtle);
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.swatch {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-xs);
+  background: var(--bit-one);
+}
+
+.swatch-zero {
+  background: var(--bit-zero);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+/* -------------------------------------------------------------- bit strip */
+
+.bit-strip {
+  display: inline-flex;
+  max-width: 100%;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.125rem;
+  overflow-x: auto;
+  padding-bottom: 0.125rem;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.bit-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.bit-btn {
+  border-radius: var(--radius-xs);
+}
+
+.bit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-xs);
+  font-weight: 500;
+  line-height: 1;
+}
+
+.bs-md .bit {
+  height: 2rem;
+  min-width: 1.75rem;
+  padding: 0 0.375rem;
+  font-size: 0.875rem;
+}
+
+.bs-sm .bit {
+  height: 1.75rem;
+  min-width: 1.5rem;
+  padding: 0 0.25rem;
+  font-size: 0.75rem;
+}
+
+.bs-lg .bit {
+  height: 2.75rem;
+  min-width: 2.25rem;
+  padding: 0 0.375rem;
+  font-size: 1rem;
+}
+
+.bit-one {
+  background: var(--bit-one);
+  color: var(--primary-fg);
+}
+
+.bit-zero {
+  background: rgb(217 208 192 / 0.7);
+  color: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.bit-sign {
+  box-shadow: inset 0 0 0 1px rgb(32 71 64 / 0.3);
+}
+
+.bit-btn:hover .bit {
+  filter: brightness(1.1);
+}
+
+.bit-btn:active .bit {
+  transform: scale(0.9);
+}
+
+.bit-btn .bit {
+  transition: transform 150ms, background-color 150ms;
+}
+
+.bit-point,
+.bit-sep {
+  padding: 0 0.125rem;
+  color: var(--muted);
+}
+
+.bit-extra {
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  border-radius: var(--radius-xs);
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------- forms box */
+
+.forms-box {
+  display: grid;
+  gap: 0.375rem;
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  padding: 0.75rem;
+  font-size: 0.75rem;
+}
+
+.forms-box.is-error {
+  display: block;
+  background: transparent;
+  padding: 0;
+}
+
+.form-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.form-key {
+  color: var(--subtle);
+}
+
+.form-val {
+  color: var(--fg);
+}
+
+.form-note {
+  color: var(--subtle);
+}
+
+.form-error {
+  font-size: 0.75rem;
+  color: var(--danger);
+}
+
+/* ------------------------------------------------------------ algo / preset */
+
+.algo-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.algo {
+  border-radius: var(--radius-md);
+  padding: 0.625rem 0.75rem;
+  text-align: left;
+  background: var(--bg-raised);
+  color: var(--fg);
+  transition: background-color 150ms;
+}
+
+.algo:hover {
+  background: rgb(221 210 192 / 0.5);
+}
+
+.algo.is-active {
+  background: var(--primary);
+  color: var(--primary-fg);
+}
+
+.algo-name {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.algo-blurb {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--subtle);
+}
+
+.algo.is-active .algo-blurb {
+  color: rgb(244 239 228 / 0.7);
+}
+
+.preset-label-title {
+  margin-bottom: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.preset {
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  transition: background-color 150ms;
+}
+
+.preset:hover {
+  background: rgb(221 210 192 / 0.6);
+}
+
+.preset-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--fg);
+}
+
+.preset-hint {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--subtle);
+}
+
+/* ------------------------------------------------------------------ cards */
+
+.card {
+  border-radius: var(--radius-2xl);
+  background: var(--surface);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-border);
+}
+
+.card-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.025em;
+  color: var(--muted);
+}
+
+.card-title {
+  margin-top: 0.25rem;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.empty-note {
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.warning {
+  border-radius: var(--radius-md);
+  background: rgb(122 84 28 / 0.1);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--warn);
+}
+
+.truth-box {
+  margin-top: 1rem;
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  padding: 0.75rem;
+}
+
+.truth-line {
+  font-size: 0.875rem;
+  color: var(--fg);
+}
+
+.truth-note {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--subtle);
+}
+
+.truth-code {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.card-forms {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.form-line-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.form-line-name {
+  font-size: 0.75rem;
+  color: var(--subtle);
+}
+
+.form-line-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.form-line-extra {
+  font-size: 0.75rem;
+  color: var(--subtle);
+}
+
+.form-line-text {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--subtle);
+}
+
+.form-line-value {
+  font-size: 0.875rem;
+}
+
+.copy-btn {
+  display: inline-flex;
+  width: 1.75rem;
+  height: 1.75rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-xs);
+  color: var(--subtle);
+}
+
+.copy-btn:hover {
+  background: var(--bg-raised);
+  color: var(--fg);
+}
+
+.copy-btn svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.copy-ok {
+  display: inline-flex;
+  color: var(--add);
+}
+
+.card-remainder {
+  margin-top: 1.25rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.card-remainder-title {
+  margin-bottom: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+/* --------------------------------------------------------- compare table */
+
+.compare-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.compare-note {
+  margin: 0.75rem 0;
+  font-size: 0.75rem;
+  color: var(--subtle);
+}
+
+.compare-table {
+  width: 100%;
+  min-width: 20rem;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.875rem;
+}
+
+.compare-table th {
+  padding: 0 0.75rem 0.5rem 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--subtle);
+}
+
+.compare-table th:last-child,
+.compare-table td:last-child {
+  padding-right: 0;
+}
+
+.compare-table tbody tr {
+  border-top: 1px solid rgb(221 210 192 / 0.7);
+  cursor: pointer;
+  transition: background-color 150ms;
+}
+
+.compare-table tbody tr:hover {
+  background: var(--bg-raised);
+}
+
+.compare-table tbody tr.is-active {
+  background: rgb(32 71 64 / 0.08);
+}
+
+.compare-table td {
+  padding: 0.625rem 0.75rem 0.625rem 0;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.row-name {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.row-name.is-active {
+  color: var(--primary);
+}
+
+/* ---------------------------------------------------------- paper multiply */
+
+.paper {
+  font-size: 0.75rem;
+}
+
+.paper-inner {
+  display: inline-flex;
+  min-width: 100%;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  padding: 0.75rem;
+}
+
+.paper-line {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.paper-line.is-dim {
+  opacity: 0.4;
+}
+
+.paper-prefix {
+  width: 4rem;
+  text-align: right;
+  color: var(--subtle);
+}
+
+.paper-bits {
+  letter-spacing: 0.35em;
+}
+
+.paper-bits.is-strong {
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.paper-rule {
+  margin: 0.25rem 0;
+  height: 1px;
+  width: 100%;
+  background: var(--border-strong);
+}
+
+/* ------------------------------------------------------------------ rules */
+
+.rules-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.rules-head svg {
+  width: 1rem;
+  height: 1rem;
+  color: var(--primary);
+}
+
+.rules-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+.rules-list li {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.rule-dot {
+  margin-top: 0.55rem;
+  width: 0.25rem;
+  height: 0.25rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--primary);
+}
+
+/* ------------------------------------------------------------------ steps */
+
+.steps-card {
+  padding: 1rem;
+}
+
+@media (min-width: 640px) {
+  .steps-card {
+    padding: 1.25rem;
+  }
+}
+
+.steps-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+@media (min-width: 640px) {
+  .steps-head {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.steps-title {
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.steps-meta {
+  font-size: 0.75rem;
+  color: var(--subtle);
+}
+
+.steps-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-weight: 500;
+  user-select: none;
+  border-radius: var(--radius-md);
+  transition: opacity 150ms, transform 150ms, background-color 150ms, color 150ms;
+}
+
+.btn:disabled {
+  pointer-events: none;
+  opacity: 0.4;
+}
+
+.btn:not(:disabled):active {
+  transform: scale(0.96);
+}
+
+.btn-sm {
+  height: 2.25rem;
+  padding: 0 0.75rem;
+  font-size: 0.875rem;
+  border-radius: var(--radius-sm);
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: var(--primary-fg);
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+.btn-secondary {
+  background: var(--surface-2);
+  color: var(--fg);
+  box-shadow: var(--shadow-border);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-raised);
+}
+
+.btn-icon {
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+}
+
+.btn-icon svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.step {
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  padding: 0.75rem;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+@media (min-width: 640px) {
+  .step {
+    padding: 1rem;
+  }
+}
+
+.step.is-active {
+  box-shadow: inset 0 0 0 1px rgb(32 71 64 / 0.4);
+}
+
+.step-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.step-phase {
+  border-radius: var(--radius-xs);
+  background: var(--bg-raised);
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.kind {
+  border-radius: var(--radius-xs);
+  padding: 0.125rem 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.k-add {
+  background: rgb(45 90 56 / 0.12);
+  color: var(--add);
+}
+
+.k-sub {
+  background: rgb(139 61 52 / 0.12);
+  color: var(--sub);
+}
+
+.k-shift {
+  background: rgb(61 79 92 / 0.1);
+  color: var(--info);
+}
+
+.k-correct {
+  background: rgb(122 84 28 / 0.12);
+  color: var(--warn);
+}
+
+.k-zero,
+.k-info {
+  background: var(--bg-raised);
+  color: var(--muted);
+}
+
+.step-op {
+  font-size: 0.875rem;
+  color: var(--fg);
+}
+
+.step-judge {
+  font-size: 0.75rem;
+  color: var(--subtle);
+}
+
+.step-note {
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+.step-regs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.step-reg {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+@media (min-width: 640px) {
+  .step-reg {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.75rem;
+  }
+}
+
+.step-reg-name {
+  width: 7rem;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: var(--subtle);
+}
+
+/* ----------------------------------------------------------------- footer */
+
+.foot {
+  padding-bottom: 2rem;
+  font-size: 0.75rem;
+  line-height: 1.65;
+  color: var(--subtle);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="page-head">
+        <div class="head-text">
+          <p class="eyebrow">定点小数 · 机器数演算</p>
+          <h1>原码 / 补码 乘除法</h1>
+          <p class="lede">
+            按计算机组成原理规则，对二进制小数做原码一位/两位乘法、Booth 补码乘法，以及原码恢复余数、加减交替与补码除法。点按位翻转即可改操作数。
+          </p>
+        </div>
+        <div class="head-tools">
+          <div class="stepper">
+            <span class="stepper-label">尾数</span>
+            <button type="button" id="n-dec" aria-label="减少尾数位数"></button>
+            <span class="stepper-value mono" id="n-value">4</span>
+            <button type="button" id="n-inc" aria-label="增加尾数位数"></button>
+            <span class="stepper-unit">位</span>
+          </div>
+          <button type="button" class="icon-btn" id="reset" aria-label="重置"></button>
+        </div>
+      </header>
+
+      <div class="op-tabs" id="op-tabs"></div>
+
+      <section class="grid">
+        <div class="panel">
+          <div class="encoding-tabs" id="encoding-tabs"></div>
+          <p class="hint" id="encoding-hint"></p>
+
+          <div class="operand" id="operand-x">
+            <div class="operand-head">
+              <label class="field-label" id="label-x">被乘数 X</label>
+              <button type="button" class="mini-btn" data-negate="x">取负</button>
+            </div>
+            <input
+              class="bit-input"
+              id="input-x"
+              spellcheck="false"
+              autocapitalize="off"
+              autocomplete="off"
+              placeholder="0.1011"
+            />
+            <div class="pad-head">
+              <p class="pad-hint">点按位翻转 · 左起为符号位</p>
+              <div class="legend">
+                <span><span class="swatch"></span>1</span>
+                <span><span class="swatch swatch-zero"></span>0</span>
+              </div>
+            </div>
+            <div id="pad-x"></div>
+            <div class="forms-box" id="forms-x"></div>
+          </div>
+
+          <div class="swap-row" id="swap-row" style="display: flex; justify-content: center">
+            <button type="button" class="mini-btn" id="swap"></button>
+          </div>
+
+          <div class="operand" id="operand-y">
+            <div class="operand-head">
+              <label class="field-label" id="label-y">乘数 Y</label>
+              <button type="button" class="mini-btn" data-negate="y">取负</button>
+            </div>
+            <input
+              class="bit-input"
+              id="input-y"
+              spellcheck="false"
+              autocapitalize="off"
+              autocomplete="off"
+              placeholder="0.1011"
+            />
+            <div class="pad-head">
+              <p class="pad-hint">点按位翻转 · 左起为符号位</p>
+              <div class="legend">
+                <span><span class="swatch"></span>1</span>
+                <span><span class="swatch swatch-zero"></span>0</span>
+              </div>
+            </div>
+            <div id="pad-y"></div>
+            <div class="forms-box" id="forms-y"></div>
+          </div>
+
+          <div class="algo-grid" id="algo-grid"></div>
+
+          <div>
+            <p class="preset-label-title">教材例题</p>
+            <div class="presets" id="presets"></div>
+          </div>
+        </div>
+
+        <div class="right-col" id="right-col"></div>
+      </section>
+
+      <div id="steps-host"></div>
+
+      <footer class="foot">
+        <p>
+          乘法结果保留 2n 位尾数；除法商保留 n 位。补码除法按教材「末位恒置 1」校正，与真值的误差不超过
+          2⁻ⁿ。部分积 / 余数在演算中使用双符号位，避免加减溢出被误判。
+        </p>
+      </footer>
+    </div>
+
+    <script>
+      // Ported from src/lib/binary-arith.ts (定点演算纸) — plain JS, no TS syntax.
+// `export` keywords are stripped when inlined into the single-file HTML build.
+
+const MAX_N = 12;
+const MIN_N = 2;
+
+function clampN(n) {
+  return Math.min(MAX_N, Math.max(MIN_N, Math.round(n)));
+}
+
+function intToBits(value, width) {
+  const bits = [];
+  const mask = width >= 31 ? 0x7fffffff : (1 << width) - 1;
+  const v = value & mask;
+  for (let i = width - 1; i >= 0; i--) {
+    bits.push((v >> i) & 1);
+  }
+  return bits;
+}
+
+function bitsToInt(bits) {
+  let v = 0;
+  for (const b of bits) v = (v << 1) | b;
+  return v >>> 0;
+}
+
+function formatBits(bits, point = 1) {
+  if (bits.length === 0) return "";
+  const p = Math.min(Math.max(point, 0), bits.length);
+  return `${bits.slice(0, p).join("")}.${bits.slice(p).join("")}`;
+}
+
+function bitsToInputString(bits, encoding) {
+  if (bits.length === 0) return "";
+  const frac = bits.slice(1).join("");
+  if (encoding === "true-bin") {
+    return `${bits[0] === 1 ? "-" : "+"}0.${frac}`;
+  }
+  return `${bits[0]}.${frac}`;
+}
+
+function paperMulRows(x, y) {
+  const n = x.length - 1;
+  const xMag = x.slice(1);
+  const yMag = y.slice(1);
+  const width = 2 * n;
+  return [...yMag].reverse().map((bit, shift) => {
+    const line = Array(width).fill(0);
+    const mag = bit === 1 ? xMag : xMag.map(() => 0);
+    for (let i = 0; i < n; i++) {
+      line[width - n - shift + i] = mag[i];
+    }
+    return { bit, shift, line };
+  });
+}
+
+function maskW(width) {
+  if (width <= 0) return 0;
+  if (width >= 31) return 0x7fffffff;
+  return (1 << width) - 1;
+}
+
+function addW(a, b, width) {
+  return (a + b) & maskW(width);
+}
+
+function negW(a, width) {
+  return addW(~a, 1, width);
+}
+
+function signExtend(value, from, to) {
+  const sign = (value >> (from - 1)) & 1;
+  if (!sign) return value & maskW(from);
+  const high = maskW(to) ^ maskW(from);
+  return (value & maskW(from)) | high;
+}
+
+function sameSign(a, b, width) {
+  const bit = 1 << (width - 1);
+  return (a & bit) === (b & bit);
+}
+
+function originalToValue(bits) {
+  const n = bits.length - 1;
+  const sign = bits[0];
+  const mag = bitsToInt(bits.slice(1));
+  const v = mag / 2 ** n;
+  return sign ? -v : v;
+}
+
+function complementToValue(bits) {
+  const n = bits.length - 1;
+  const raw = bitsToInt(bits);
+  const signBit = bits[0];
+  if (!signBit) return raw / 2 ** n;
+  return (raw - 2 ** (n + 1)) / 2 ** n;
+}
+
+function onesToValue(bits) {
+  const n = bits.length - 1;
+  if (bits[0] === 0) return bitsToInt(bits.slice(1)) / 2 ** n;
+  const mag = bitsToInt(bits.slice(1).map((b) => (b ? 0 : 1)));
+  return -mag / 2 ** n;
+}
+
+function valueToOriginal(value, n) {
+  const scale = 2 ** n;
+  const sign = value < 0 ? 1 : 0;
+  let mag = Math.round(Math.abs(value) * scale);
+  if (mag >= scale) mag = scale - 1;
+  return [sign, ...intToBits(mag, n)];
+}
+
+function valueToComplement(value, n) {
+  const scale = 2 ** n;
+  let int = Math.round(value * scale);
+  const min = -scale;
+  const max = scale - 1;
+  if (int < min) int = min;
+  if (int > max) int = max;
+  if (int < 0) int += 2 * scale;
+  return intToBits(int, n + 1);
+}
+
+function valueToOnes(value, n) {
+  const orig = valueToOriginal(value, n);
+  if (orig[0] === 0) return orig;
+  return [1, ...orig.slice(1).map((b) => (b ? 0 : 1))];
+}
+
+function originalToComplement(orig) {
+  return valueToComplement(originalToValue(orig), orig.length - 1);
+}
+
+function complementToOriginal(comp) {
+  return valueToOriginal(complementToValue(comp), comp.length - 1);
+}
+
+function originalToOnes(orig) {
+  if (orig[0] === 0) return [...orig];
+  return [1, ...orig.slice(1).map((b) => (b ? 0 : 1))];
+}
+
+function encodeForms(value, n, overflow = false) {
+  return {
+    n,
+    value,
+    original: valueToOriginal(value, n),
+    complement: valueToComplement(value, n),
+    ones: valueToOnes(value, n),
+    overflow,
+  };
+}
+
+function padFrac(frac, n) {
+  if (frac.length === n) return { bits: frac };
+  if (frac.length < n) {
+    return {
+      bits: [...frac, ...Array(n - frac.length).fill(0)],
+      note: `尾数不足 ${n} 位，右侧补 0`,
+    };
+  }
+  return {
+    bits: frac.slice(0, n),
+    note: `尾数超过 ${n} 位，截取高 ${n} 位`,
+  };
+}
+
+function parseOperand(raw, n, encoding) {
+  const text = raw.trim().replace(/\s+/g, "");
+  if (!text) return { ok: false, error: "请输入操作数" };
+
+  if (/[2-9]/.test(text) || /e/i.test(text) || text.includes("E")) {
+    const num = Number(text);
+    if (!Number.isFinite(num)) return { ok: false, error: "无法解析十进制数" };
+    if (Math.abs(num) >= 1) {
+      return { ok: false, error: "定点小数要求 |真值| < 1（补码可表示 −1）" };
+    }
+    const bits =
+      encoding === "complement" ? valueToComplement(num, n) : valueToOriginal(num, n);
+    return {
+      ok: true,
+      bits,
+      n,
+      value: encoding === "complement" ? complementToValue(bits) : originalToValue(bits),
+      encoding,
+      note: "已按十进制真值量化到定点格式",
+    };
+  }
+
+  const minus = text.startsWith("-");
+  const plus = text.startsWith("+");
+  const body = minus || plus ? text.slice(1) : text;
+  const cleaned = body.replace(/^0+b/i, "");
+  const parts = cleaned.split(".");
+  if (parts.length > 2) return { ok: false, error: "二进制格式应为 s.xxxx 或 ±0.xxxx" };
+
+  const intPart = parts[0] ?? "";
+  const fracPart = parts[1] ?? "";
+  if (![...intPart, ...fracPart].every((c) => c === "0" || c === "1")) {
+    return { ok: false, error: "二进制只允许 0 / 1" };
+  }
+
+  if (encoding === "true-bin" || minus || plus) {
+    const fracBits = fracPart.split("").map((c) => (c === "1" ? 1 : 0));
+    const { bits: padded, note } = padFrac(fracBits, n);
+    const sign = minus ? 1 : 0;
+    const bits = [sign, ...padded];
+    return { ok: true, bits, n, value: originalToValue(bits), encoding: "true-bin", note };
+  }
+
+  let signBits;
+  if (intPart.length === 0) signBits = [0];
+  else signBits = intPart.split("").map((c) => (c === "1" ? 1 : 0));
+  const sign = signBits[signBits.length - 1] ?? 0;
+  const fracBits = fracPart.split("").map((c) => (c === "1" ? 1 : 0));
+  const { bits: padded, note } = padFrac(fracBits, n);
+  const bits = [sign, ...padded];
+  const value =
+    encoding === "complement" ? complementToValue(bits) : originalToValue(bits);
+  return { ok: true, bits, n, value, encoding, note };
+}
+
+function reg(name, value, width, point, extra) {
+  return { name, bits: intToBits(value, width), point, extra };
+}
+
+function magOfOriginal(bits) {
+  return bitsToInt(bits.slice(1));
+}
+
+function multiplyOriginal1(x, y) {
+  const n = x.length - 1;
+  const xs = x[0];
+  const ys = y[0];
+  const ps = xs ^ ys;
+  const M = magOfOriginal(x);
+  let A = 0;
+  let Q = magOfOriginal(y);
+  const aWidth = n + 1;
+  const steps = [
+    {
+      i: 0,
+      phase: "init",
+      judge: "—",
+      operation: "置初值",
+      registers: [reg("A 部分积", A, aWidth, 1), reg("|Y| 乘数", Q, n, 0)],
+      note: "原码一位乘法只对尾数绝对值运算。符号单独处理：Ps = Xs ⊕ Ys。A 多留 1 位整数位，防止加法进位。",
+      kind: "info",
+    },
+  ];
+
+  for (let i = 1; i <= n; i++) {
+    const ybit = Q & 1;
+    if (ybit === 1) {
+      A = addW(A, M, aWidth);
+      steps.push({
+        i,
+        phase: "operate",
+        judge: "yn = 1",
+        operation: "A ← A + |X|",
+        registers: [reg("A 部分积", A, aWidth, 1), reg("|Y| 乘数", Q, n, 0)],
+        note: `第 ${i} 步：乘数最低位为 1，部分积加上被乘数绝对值。`,
+        kind: "add",
+      });
+    } else {
+      steps.push({
+        i,
+        phase: "operate",
+        judge: "yn = 0",
+        operation: "A ← A + 0",
+        registers: [reg("A 部分积", A, aWidth, 1), reg("|Y| 乘数", Q, n, 0)],
+        note: `第 ${i} 步：乘数最低位为 0，部分积保持不变。`,
+        kind: "zero",
+      });
+    }
+    const combined = (A << n) | Q;
+    const shifted = combined >> 1;
+    A = shifted >> n;
+    Q = shifted & maskW(n);
+    steps.push({
+      i,
+      phase: "shift",
+      judge: "—",
+      operation: "逻辑右移 1 位",
+      registers: [reg("A 部分积", A, aWidth, 1), reg("|Y| 乘数", Q, n, 0)],
+      note: "A 与乘数寄存器拼接后逻辑右移，高位补 0。移出的 yn 不再使用。",
+      kind: "shift",
+    });
+  }
+
+  const productMag = ((A << n) | Q) & maskW(2 * n);
+  const magBits = intToBits(productMag, 2 * n);
+  const value = (ps ? -1 : 1) * (productMag / 2 ** (2 * n));
+  steps.push({
+    i: n + 1,
+    phase: "done",
+    judge: `Ps = ${xs} ⊕ ${ys} = ${ps}`,
+    operation: "拼接符号与尾数",
+    registers: [
+      {
+        name: "[P]原",
+        bits: [ps, ...magBits],
+        point: 1,
+      },
+    ],
+    note: `乘积原码 = ${formatBits([ps, ...magBits])}，共 1 位符号 + ${2 * n} 位尾数。`,
+    kind: "info",
+  });
+
+  return {
+    ok: true,
+    forms: encodeForms(value, 2 * n),
+    steps,
+    algorithm: "original-1",
+    algorithmTitle: "原码一位乘法",
+    ruleLines: [
+      "符号位单独计算：乘积符号 = Xs ⊕ Ys。",
+      "尾数按无符号数做移位加：yn=1 则部分积加 |X|，yn=0 则加 0。",
+      "每步结束后，部分积与乘数逻辑右移 1 位，共做 n 步。",
+      "结果为 2n 位尾数的原码定点小数。",
+    ],
+  };
+}
+
+function multiplyOriginal2(x, y) {
+  const n = x.length - 1;
+  const xs = x[0];
+  const ys = y[0];
+  const ps = xs ^ ys;
+  const M = magOfOriginal(x);
+  const twoM = M << 1;
+  const threeM = twoM + M;
+  let magBitsY = y.slice(1);
+  let workN = n;
+  let padNote;
+  if (n % 2 === 1) {
+    magBitsY = [0, ...magBitsY];
+    workN = n + 1;
+    padNote = "尾数位数为奇数，乘数高位补 0，按两位一组处理。";
+  }
+  let A = 0;
+  let Q = bitsToInt(magBitsY);
+  const aWidth = workN + 3;
+  const steps = [
+    {
+      i: 0,
+      phase: "init",
+      judge: "—",
+      operation: "置初值",
+      registers: [reg("A 部分积", A, aWidth, 1), reg("|Y| 乘数", Q, workN, 0)],
+      note:
+        "原码两位乘法每次取乘数最低两位。00→+0，01→+|X|，10→+2|X|，11→+3|X|，然后逻辑右移 2 位。" +
+        (padNote ? ` ${padNote}` : ""),
+      kind: "info",
+    },
+  ];
+
+  const groups = workN / 2;
+  for (let i = 1; i <= groups; i++) {
+    const pair = Q & 3;
+    let addend = 0;
+    let op = "A ← A + 0";
+    let judge = "yn+1 yn = 00";
+    let kind = "zero";
+    if (pair === 1) {
+      addend = M;
+      op = "A ← A + |X|";
+      judge = "yn+1 yn = 01";
+      kind = "add";
+    } else if (pair === 2) {
+      addend = twoM;
+      op = "A ← A + 2|X|";
+      judge = "yn+1 yn = 10";
+      kind = "add";
+    } else if (pair === 3) {
+      addend = threeM;
+      op = "A ← A + 3|X|";
+      judge = "yn+1 yn = 11";
+      kind = "add";
+    }
+    A = addW(A, addend, aWidth);
+    steps.push({
+      i,
+      phase: "operate",
+      judge,
+      operation: op,
+      registers: [reg("A 部分积", A, aWidth, 1), reg("|Y| 乘数", Q, workN, 0)],
+      note: `第 ${i} 组：根据乘数最低两位 ${intToBits(pair, 2).join("")} 选择加数。`,
+      kind,
+    });
+    const combined = (A << workN) | Q;
+    const shifted = combined >> 2;
+    A = shifted >> workN;
+    Q = shifted & maskW(workN);
+    steps.push({
+      i,
+      phase: "shift",
+      judge: "—",
+      operation: "逻辑右移 2 位",
+      registers: [reg("A 部分积", A, aWidth, 1), reg("|Y| 乘数", Q, workN, 0)],
+      note: "部分积与乘数一起右移两位，相当于处理完这一组。",
+      kind: "shift",
+    });
+  }
+
+  const productMag = ((A << workN) | Q) & maskW(2 * n);
+  const magBits = intToBits(productMag, 2 * n);
+  const value = (ps ? -1 : 1) * (productMag / 2 ** (2 * n));
+  steps.push({
+    i: groups + 1,
+    phase: "done",
+    judge: `Ps = ${xs} ⊕ ${ys} = ${ps}`,
+    operation: "拼接符号与尾数",
+    registers: [{ name: "[P]原", bits: [ps, ...magBits], point: 1 }],
+    note: `乘积原码 = ${formatBits([ps, ...magBits])}。`,
+    kind: "info",
+  });
+
+  return {
+    ok: true,
+    forms: encodeForms(value, 2 * n),
+    steps,
+    algorithm: "original-2",
+    algorithmTitle: "原码两位乘法",
+    ruleLines: [
+      "符号位：Ps = Xs ⊕ Ys，与一位乘法相同。",
+      "乘数两位一组，从低位开始：00 加 0，01 加 |X|，10 加 2|X|，11 加 3|X|。",
+      "每组运算后逻辑右移 2 位，步数约为 n/2。",
+      "硬件上通常预置 |X| 与 2|X|，3|X| 由二者相加得到。",
+    ],
+  };
+}
+
+function multiplyComplement1(xOrig, yOrig) {
+  const n = xOrig.length - 1;
+  const xComp = originalToComplement(xOrig);
+  const yComp = originalToComplement(yOrig);
+  const width = n + 1;
+  const aWidth = n + 2;
+  const M = signExtend(bitsToInt(xComp), width, aWidth);
+  const minusM = negW(M, aWidth);
+  let A = 0;
+  let Q = bitsToInt(yComp);
+  let qMinus = 0;
+  const steps = [
+    {
+      i: 0,
+      phase: "init",
+      judge: "yₙ yₙ₊₁ = " + `${Q & 1}${qMinus}`,
+      operation: "置初值，附加位 = 0",
+      registers: [
+        reg("A 部分积", A, aWidth, 2),
+        { ...reg("[Y]补", Q, width, 1), extra: qMinus },
+      ],
+      note: `先把 X、Y 转成补码：[X]补=${formatBits(xComp)}，[Y]补=${formatBits(yComp)}。[−X]补=${formatBits(intToBits(minusM, aWidth), 2)}。符号位参与运算，部分积用双符号位。`,
+      kind: "info",
+    },
+  ];
+
+  for (let i = 1; i <= width; i++) {
+    const q0 = Q & 1;
+    const pair = `${q0}${qMinus}`;
+    let op = "不操作";
+    let kind = "zero";
+    if (q0 === 0 && qMinus === 1) {
+      A = addW(A, M, aWidth);
+      op = "A ← A + [X]补";
+      kind = "add";
+    } else if (q0 === 1 && qMinus === 0) {
+      A = addW(A, minusM, aWidth);
+      op = "A ← A + [−X]补";
+      kind = "sub";
+    }
+    steps.push({
+      i,
+      phase: "operate",
+      judge: `yi yi+1 = ${pair}`,
+      operation: op,
+      registers: [
+        reg("A 部分积", A, aWidth, 2),
+        { ...reg("[Y]补", Q, width, 1), extra: qMinus },
+      ],
+      note:
+        pair === "01"
+          ? "相邻两位为 01，相当于乘数这一位由 0 变 1，加上 [X]补。"
+          : pair === "10"
+            ? "相邻两位为 10，相当于乘数这一位由 1 变 0，加上 [−X]补。"
+            : "相邻两位相同（00 或 11），部分积不变。",
+      kind,
+    });
+    const aSign = (A >> (aWidth - 1)) & 1;
+    const aLsb = A & 1;
+    const qLsb = Q & 1;
+    A = (aSign << (aWidth - 1)) | (A >> 1);
+    Q = (aLsb << (width - 1)) | (Q >> 1);
+    qMinus = qLsb;
+    steps.push({
+      i,
+      phase: "shift",
+      judge: "—",
+      operation: "算术右移 1 位",
+      registers: [
+        reg("A 部分积", A, aWidth, 2),
+        { ...reg("[Y]补", Q, width, 1), extra: qMinus },
+      ],
+      note: "双符号位一起算术右移：高位补符号，A 的最低位移入 Y，Y 的最低位成为新的附加位。",
+      kind: "shift",
+    });
+  }
+
+  const full = intToBits((A << width) | Q, aWidth + width);
+  const productBits = full.slice(2);
+  const value = complementToValue(productBits);
+  const overflow = Math.abs(originalToValue(xOrig) * originalToValue(yOrig)) >= 1;
+
+  steps.push({
+    i: width + 1,
+    phase: "done",
+    judge: "—",
+    operation: "取双符号中的一位 + 2n 位尾数",
+    registers: [{ name: "[P]补", bits: productBits, point: 1 }],
+    note: `乘积补码 = ${formatBits(productBits)}。共做 ${width} 次判断与 ${width} 次算术右移。`,
+    kind: "info",
+  });
+
+  return {
+    ok: true,
+    warning: overflow ? "−1 × −1 = +1，超出定点小数表示范围。" : undefined,
+    forms: encodeForms(value, 2 * n, overflow),
+    steps,
+    algorithm: "complement-1",
+    algorithmTitle: "补码一位乘法（Booth）",
+    ruleLines: [
+      "符号位参与运算，部分积使用双符号位。乘数末尾增设附加位 yₙ₊₁=0。",
+      "比较 yi yi+1：01 加 [X]补，10 加 [−X]补，00 / 11 不加。",
+      "每步之后算术右移 1 位，共 n+1 步（含符号位）。",
+      "结果直接为乘积的补码，再转换为原码 / 反码 / 真值。",
+    ],
+  };
+}
+
+function booth2Recode(triplet) {
+  switch (triplet) {
+    case 0b000:
+    case 0b111:
+      return { add: "0", label: "0" };
+    case 0b001:
+    case 0b010:
+      return { add: "+M", label: "+[X]补" };
+    case 0b011:
+      return { add: "+2M", label: "+2[X]补" };
+    case 0b100:
+      return { add: "-2M", label: "−2[X]补" };
+    case 0b101:
+    case 0b110:
+      return { add: "-M", label: "−[X]补" };
+    default:
+      return { add: "0", label: "0" };
+  }
+}
+
+function multiplyComplement2(xOrig, yOrig) {
+  const n = xOrig.length - 1;
+  const xComp = originalToComplement(xOrig);
+  const yComp = originalToComplement(yOrig);
+  const width = n + 1;
+  let padWidth = width;
+  let Q = bitsToInt(yComp);
+  if (padWidth % 2 === 1) {
+    Q = signExtend(Q, width, width + 1);
+    padWidth = width + 1;
+  }
+  const aWidth = padWidth;
+  const M = signExtend(bitsToInt(xComp), width, aWidth);
+  const twoM = addW(M, M, aWidth);
+  const minusM = negW(M, aWidth);
+  const minus2M = negW(twoM, aWidth);
+  let A = 0;
+  let qMinus = 0;
+  const steps = [
+    {
+      i: 0,
+      phase: "init",
+      judge: "—",
+      operation: "置初值，y₋₁ = 0" + (padWidth !== width ? "，符号位扩展 1 位" : ""),
+      registers: [
+        reg("A 部分积", A, aWidth, 2),
+        { ...reg("[Y]补", Q, padWidth, 1), extra: qMinus },
+      ],
+      note: `Booth 两位编码（基 4）。[X]补=${formatBits(xComp)}，[Y]补=${formatBits(yComp)}。每次看 y₂ᵢ₊₁ y₂ᵢ y₂ᵢ₋₁ 三位，然后算术右移 2 位。`,
+      kind: "info",
+    },
+  ];
+
+  const cycles = padWidth / 2;
+  for (let i = 1; i <= cycles; i++) {
+    const q0 = Q & 1;
+    const q1 = (Q >> 1) & 1;
+    const triplet = (q1 << 2) | (q0 << 1) | qMinus;
+    const rec = booth2Recode(triplet);
+    let kind = "zero";
+    if (rec.add === "+M") {
+      A = addW(A, M, aWidth);
+      kind = "add";
+    } else if (rec.add === "+2M") {
+      A = addW(A, twoM, aWidth);
+      kind = "add";
+    } else if (rec.add === "-M") {
+      A = addW(A, minusM, aWidth);
+      kind = "sub";
+    } else if (rec.add === "-2M") {
+      A = addW(A, minus2M, aWidth);
+      kind = "sub";
+    }
+    steps.push({
+      i,
+      phase: "operate",
+      judge: `y₂ᵢ₊₁ y₂ᵢ y₋₁ = ${q1}${q0}${qMinus}`,
+      operation:
+        rec.add === "0"
+          ? "不操作"
+          : rec.add === "+M"
+            ? "A ← A + [X]补"
+            : rec.add === "+2M"
+              ? "A ← A + 2[X]补"
+              : rec.add === "-M"
+                ? "A ← A + [−X]补"
+                : "A ← A + [−2X]补",
+      registers: [
+        reg("A 部分积", A, aWidth, 2),
+        { ...reg("[Y]补", Q, padWidth, 1), extra: qMinus },
+      ],
+      note: `编码 ${q1}${q0}${qMinus} → ${rec.label}。`,
+      kind,
+    });
+    for (let s = 0; s < 2; s++) {
+      const aSign = (A >> (aWidth - 1)) & 1;
+      const aLsb = A & 1;
+      const qLsb = Q & 1;
+      A = (aSign << (aWidth - 1)) | (A >> 1);
+      Q = (aLsb << (padWidth - 1)) | (Q >> 1);
+      qMinus = qLsb;
+    }
+    steps.push({
+      i,
+      phase: "shift",
+      judge: "—",
+      operation: "算术右移 2 位",
+      registers: [
+        reg("A 部分积", A, aWidth, 2),
+        { ...reg("[Y]补", Q, padWidth, 1), extra: qMinus },
+      ],
+      note: "一次处理两位乘数，部分积算术右移两位。",
+      kind: "shift",
+    });
+  }
+
+  const full = intToBits((A << padWidth) | Q, aWidth + padWidth);
+  const want = 1 + 2 * n;
+  const drop = full.length - want;
+  const productBits = drop > 0 ? full.slice(drop) : full;
+  const value = complementToValue(productBits);
+
+  steps.push({
+    i: cycles + 1,
+    phase: "done",
+    judge: "—",
+    operation: "截取 1 位符号 + 2n 位尾数",
+    registers: [{ name: "[P]补", bits: productBits, point: 1 }],
+    note: `乘积补码 = ${formatBits(productBits)}。`,
+    kind: "info",
+  });
+
+  return {
+    ok: true,
+    forms: encodeForms(value, 2 * n),
+    steps,
+    algorithm: "complement-2",
+    algorithmTitle: "补码两位乘法（Booth-2）",
+    ruleLines: [
+      "符号位参与运算。乘数附加 y₋₁=0；若位数为奇数则符号扩展 1 位。",
+      "每次取三位 y₂ᵢ₊₁ y₂ᵢ y₂ᵢ₋₁：000/111→0，001/010→+X，011→+2X，100→−2X，101/110→−X。",
+      "操作后算术右移 2 位，循环 n/2 次量级。",
+      "结果为乘积补码。",
+    ],
+  };
+}
+
+function divideRestoring(x, y) {
+  const n = x.length - 1;
+  const xs = x[0];
+  const ys = y[0];
+  const qs = xs ^ ys;
+  const rs = xs;
+  const xMag = magOfOriginal(x);
+  const yMag = magOfOriginal(y);
+  if (yMag === 0) {
+    return {
+      ok: false,
+      error: "除数为 0",
+      forms: encodeForms(0, n),
+      steps: [],
+      algorithm: "restoring",
+      algorithmTitle: "原码恢复余数除法",
+      ruleLines: [],
+    };
+  }
+  const overflow = xMag >= yMag;
+  let R = xMag;
+  let Q = 0;
+  const rWidth = n + 1;
+  const steps = [
+    {
+      i: 0,
+      phase: "init",
+      judge: overflow ? "|X| ≥ |Y|，商溢出" : "|X| < |Y|",
+      operation: "置初值",
+      registers: [
+        reg("余数 R", R, rWidth, 1),
+        reg("|Y| 除数", yMag, n, 0),
+        { name: "|Q| 商", bits: intToBits(Q, n), point: 0 },
+      ],
+      note: `原码除法：符号 Qs = Xs ⊕ Ys = ${qs}，余数符号与被除数相同。只对绝对值作恢复余数除法。${overflow ? " |X|≥|Y| 时定点小数商的绝对值 ≥ 1，仍按 n 位小数继续演算（整数位溢出）。" : ""}`,
+      kind: overflow ? "correct" : "info",
+    },
+  ];
+
+  for (let i = 1; i <= n; i++) {
+    R = R << 1;
+    steps.push({
+      i,
+      phase: "shift",
+      judge: "—",
+      operation: "余数左移 1 位",
+      registers: [
+        reg("余数 R", R, rWidth + 1, 1),
+        { name: "|Q| 商", bits: intToBits(Q, n), point: 0 },
+      ],
+      note: `第 ${i} 步：先把余数左移，空出最低位准备上商。`,
+      kind: "shift",
+    });
+    const trial = R - yMag;
+    const trialWidth = rWidth + 1;
+    const trialShown = trial < 0 ? addW(trial, 1 << trialWidth, trialWidth) : trial;
+    steps.push({
+      i,
+      phase: "operate",
+      judge: "试探减法",
+      operation: "R ← R − |Y|",
+      registers: [
+        reg("余数 R", trialShown, trialWidth, 1),
+        { name: "|Q| 商", bits: intToBits(Q, n), point: 0 },
+      ],
+      note: trial >= 0
+        ? "差 ≥ 0，够减。"
+        : "差 < 0，不够减。下面把刚减去的 |Y| 加回去，恢复余数。",
+      kind: "sub",
+    });
+    if (trial >= 0) {
+      R = trial;
+      Q = (Q << 1) | 1;
+      steps.push({
+        i,
+        phase: "judge",
+        judge: "余数 − |Y| ≥ 0",
+        operation: "上商 1，余数保持相减结果",
+        registers: [
+          reg("余数 R", R, rWidth, 1),
+          { name: "|Q| 商", bits: intToBits(Q, i), point: 0 },
+        ],
+        note: "够减：商 1，不需要恢复。",
+        kind: "info",
+      });
+    } else {
+      Q = (Q << 1) | 0;
+      R = trial + yMag;
+      steps.push({
+        i,
+        phase: "correct",
+        judge: "余数 − |Y| < 0",
+        operation: "上商 0，R ← R + |Y|（恢复）",
+        registers: [
+          reg("余数 R", R, rWidth + 1, 1),
+          { name: "|Q| 商", bits: intToBits(Q, i), point: 0 },
+        ],
+        note: "不够减：商 0，加回 |Y|，余数回到左移后、相减前的值。",
+        kind: "correct",
+      });
+    }
+  }
+
+  const qValue = (qs ? -1 : 1) * (Q / 2 ** n);
+  const rValue = (rs ? -1 : 1) * (R / 2 ** (2 * n));
+  steps.push({
+    i: n + 1,
+    phase: "done",
+    judge: `Qs = ${xs} ⊕ ${ys} = ${qs}`,
+    operation: "装配商与余数",
+    registers: [
+      { name: "[Q]原", bits: [qs, ...intToBits(Q, n)], point: 1 },
+      { name: "余数寄存器", bits: intToBits(R, n + 1), point: 1 },
+    ],
+    note: `商原码 = ${formatBits([qs, ...intToBits(Q, n)])}。余数真值 = r / 2^{2n}，与被除数同号。校验：X = Q·Y + R。`,
+    kind: "info",
+  });
+
+  return {
+    ok: true,
+    warning: overflow ? "溢出：|被除数| ≥ |除数|，商的绝对值 ≥ 1，超出纯小数表示。" : undefined,
+    forms: encodeForms(qValue, n, overflow),
+    remainder: encodeForms(rValue, 2 * n),
+    steps,
+    algorithm: "restoring",
+    algorithmTitle: "原码恢复余数除法",
+    ruleLines: [
+      "符号：商符号 = Xs ⊕ Ys，余数符号与被除数相同。",
+      "每步：余数左移，减 |Y|。差 ≥ 0 上商 1；差 < 0 上商 0 并加回 |Y|（恢复）。",
+      "共上商 n 位。余数在寄存器中的权值为 2⁻²ⁿ。",
+      "要求 |X| < |Y|，否则整数位溢出。",
+    ],
+  };
+}
+
+function divideNonrestoring(x, y) {
+  const n = x.length - 1;
+  const xs = x[0];
+  const ys = y[0];
+  const qs = xs ^ ys;
+  const rs = xs;
+  const xMag = magOfOriginal(x);
+  const yMag = magOfOriginal(y);
+  if (yMag === 0) {
+    return {
+      ok: false,
+      error: "除数为 0",
+      forms: encodeForms(0, n),
+      steps: [],
+      algorithm: "nonrestoring",
+      algorithmTitle: "原码加减交替除法",
+      ruleLines: [],
+    };
+  }
+  const overflow = xMag >= yMag;
+  let R = xMag;
+  let Q = 0;
+  const rWidth = n + 2;
+  const steps = [
+    {
+      i: 0,
+      phase: "init",
+      judge: overflow ? "|X| ≥ |Y|" : "|X| < |Y|",
+      operation: "置初值",
+      registers: [
+        reg("余数 R", R, rWidth, 1),
+        reg("|Y| 除数", yMag, n, 0),
+      ],
+      note: "加减交替（不恢复余数）：余数为正时左移减除数，为负时左移加除数。最后若余数为负再恢复一次，得到正确余数。",
+      kind: "info",
+    },
+  ];
+
+  for (let i = 1; i <= n; i++) {
+    const wasPos = R >= 0;
+    if (wasPos) {
+      R = (R << 1) - yMag;
+    } else {
+      R = (R << 1) + yMag;
+    }
+    const qbit = R >= 0 ? 1 : 0;
+    Q = (Q << 1) | qbit;
+    steps.push({
+      i,
+      phase: "operate",
+      judge: wasPos ? "余数 ≥ 0" : "余数 < 0",
+      operation: wasPos ? "R ← (R≪1) − |Y|" : "R ← (R≪1) + |Y|",
+      registers: [
+        reg("余数 R", R < 0 ? (R + (1 << rWidth)) & maskW(rWidth) : R, rWidth, 1),
+        { name: "|Q| 商", bits: intToBits(Q, i), point: 0 },
+      ],
+      note: `新余数${R >= 0 ? "≥" : "<"}0，上商 ${qbit}。不立即恢复，把正负余数留到下一步用加或减抵消。`,
+      kind: wasPos ? "sub" : "add",
+    });
+  }
+
+  if (R < 0) {
+    R = R + yMag;
+    steps.push({
+      i: n,
+      phase: "correct",
+      judge: "余数 < 0",
+      operation: "余数 + |Y|（最终恢复）",
+      registers: [reg("余数 R", R, rWidth, 1)],
+      note: "运算结束时余数为负，加回除数得到与被除数同号的正确余数。商不变。",
+      kind: "correct",
+    });
+  }
+
+  const qValue = (qs ? -1 : 1) * (Q / 2 ** n);
+  const rValue = (rs ? -1 : 1) * (R / 2 ** (2 * n));
+  steps.push({
+    i: n + 1,
+    phase: "done",
+    judge: `Qs = ${qs}`,
+    operation: "装配商与余数",
+    registers: [
+      { name: "[Q]原", bits: [qs, ...intToBits(Q, n)], point: 1 },
+      { name: "余数寄存器", bits: intToBits(Math.max(0, R), n + 1), point: 1 },
+    ],
+    note: `商原码 = ${formatBits([qs, ...intToBits(Q, n)])}。`,
+    kind: "info",
+  });
+
+  return {
+    ok: true,
+    warning: overflow ? "溢出：|被除数| ≥ |除数|，商的绝对值 ≥ 1。" : undefined,
+    forms: encodeForms(qValue, n, overflow),
+    remainder: encodeForms(rValue, 2 * n),
+    steps,
+    algorithm: "nonrestoring",
+    algorithmTitle: "原码加减交替除法",
+    ruleLines: [
+      "符号处理与恢复余数法相同。",
+      "余数 ≥ 0：左移后减 |Y|；余数 < 0：左移后加 |Y|。",
+      "新余数 ≥ 0 上商 1，否则上商 0。中间不恢复。",
+      "结束后若余数为负，加回 |Y| 得到真正余数。",
+    ],
+  };
+}
+
+function divideComplement(xOrig, yOrig) {
+  const n = xOrig.length - 1;
+  const xComp = originalToComplement(xOrig);
+  const yComp = originalToComplement(yOrig);
+  if (complementToValue(yComp) === 0) {
+    return {
+      ok: false,
+      error: "除数为 0",
+      forms: encodeForms(0, n),
+      steps: [],
+      algorithm: "complement",
+      algorithmTitle: "补码加减交替除法",
+      ruleLines: [],
+    };
+  }
+  const xVal = originalToValue(xOrig);
+  const yVal = originalToValue(yOrig);
+  const overflow = Math.abs(xVal) >= Math.abs(yVal);
+
+  const w = n + 2;
+  const X = signExtend(bitsToInt(xComp), n + 1, w);
+  const Y = signExtend(bitsToInt(yComp), n + 1, w);
+  const minusY = negW(Y, w);
+  let R = X;
+  let Q = 0;
+  const firstSame = sameSign(R, Y, w);
+  const steps = [
+    {
+      i: 0,
+      phase: "init",
+      judge: "—",
+      operation: "写成补码，双符号位",
+      registers: [
+        reg("[X]补", X, w, 2),
+        reg("[Y]补", Y, w, 2),
+        reg("[−Y]补", minusY, w, 2),
+      ],
+      note: `被除数 [X]补=${formatBits(intToBits(X, w), 2)}，除数 [Y]补=${formatBits(intToBits(Y, w), 2)}。符号位参加运算。`,
+      kind: "info",
+    },
+  ];
+
+  R = firstSame ? addW(X, minusY, w) : addW(X, Y, w);
+  let qbit = sameSign(R, Y, w) ? 1 : 0;
+  Q = qbit;
+  steps.push({
+    i: 1,
+    phase: "operate",
+    judge: firstSame ? "被除数与除数同号" : "被除数与除数异号",
+    operation: firstSame ? "R ← [X]补 + [−Y]补" : "R ← [X]补 + [Y]补",
+    registers: [
+      reg("余数 R", R, w, 2),
+      { name: "[Q]补", bits: intToBits(Q, 1), point: 0 },
+    ],
+    note: `第一次上商得到商的符号位 ${qbit}（补码中 0 为正，1 为负）。余数与除数${sameSign(R, Y, w) ? "同号 → 商 1，下一步减" : "异号 → 商 0，下一步加"}。`,
+    kind: firstSame ? "sub" : "add",
+  });
+
+  for (let i = 1; i <= n; i++) {
+    const rSign = (R >> (w - 1)) & 1;
+    R = ((rSign << (w - 1)) | ((R << 1) & maskW(w - 1))) & maskW(w);
+    const doSub = qbit === 1;
+    R = doSub ? addW(R, minusY, w) : addW(R, Y, w);
+    qbit = sameSign(R, Y, w) ? 1 : 0;
+    Q = (Q << 1) | qbit;
+    steps.push({
+      i: i + 1,
+      phase: "operate",
+      judge: doSub ? "上一步商 1，余数左移后减除数" : "上一步商 0，余数左移后加除数",
+      operation: doSub ? "R ≪ 1，+ [−Y]补" : "R ≪ 1，+ [Y]补",
+      registers: [
+        reg("余数 R", R, w, 2),
+        { name: "[Q]补", bits: intToBits(Q, i + 1), point: 1 },
+      ],
+      note: `余数与除数${sameSign(R, Y, w) ? "同号，上商 1" : "异号，上商 0"}。`,
+      kind: doSub ? "sub" : "add",
+    });
+  }
+
+  const qBefore = Q;
+  Q = Q | 1;
+  if (Q !== qBefore) {
+    steps.push({
+      i: n + 2,
+      phase: "correct",
+      judge: "末位校正",
+      operation: "商的末位恒置 1",
+      registers: [{ name: "[Q]补", bits: intToBits(Q, n + 1), point: 1 }],
+      note: "教材常用「末位恒置 1」作商的校正，误差不超过末位 1 的权值。",
+      kind: "correct",
+    });
+  } else {
+    steps.push({
+      i: n + 2,
+      phase: "correct",
+      judge: "末位已是 1",
+      operation: "无需再置 1",
+      registers: [{ name: "[Q]补", bits: intToBits(Q, n + 1), point: 1 }],
+      note: "末位已经是 1，恒置 1 规则下商保持不变。",
+      kind: "info",
+    });
+  }
+
+  if (!sameSign(R, X, w)) {
+    const restoreAdd = sameSign(X, Y, w);
+    R = restoreAdd ? addW(R, Y, w) : addW(R, minusY, w);
+    steps.push({
+      i: n + 2,
+      phase: "correct",
+      judge: "余数与被除数异号",
+      operation: restoreAdd ? "余数 + [Y]补" : "余数 + [−Y]补",
+      registers: [reg("余数 R", R, w, 2)],
+      note: "余数应与被除数同号，做一次校正。",
+      kind: "correct",
+    });
+  }
+
+  const qBits = intToBits(Q, n + 1);
+  const qValue = complementToValue(qBits);
+  const rValue = complementToValue(intToBits(R, w).slice(1));
+
+  steps.push({
+    i: n + 3,
+    phase: "done",
+    judge: "—",
+    operation: "得到商的补码",
+    registers: [
+      { name: "[Q]补", bits: qBits, point: 1 },
+      { name: "[R]补", bits: intToBits(R, w), point: 2 },
+    ],
+    note: `商补码 = ${formatBits(qBits)}。`,
+    kind: "info",
+  });
+
+  return {
+    ok: true,
+    warning: overflow ? "溢出：|被除数| ≥ |除数|，商的绝对值 ≥ 1。" : undefined,
+    forms: encodeForms(qValue, n, overflow),
+    remainder: encodeForms(rValue / 2 ** n, 2 * n),
+    steps,
+    algorithm: "complement",
+    algorithmTitle: "补码加减交替除法",
+    ruleLines: [
+      "符号位参加运算，用双符号位表示余数。",
+      "被除数与除数同号做减法，异号做加法；此后余数与除数同号上商 1（下一步减），异号上商 0（下一步加）。",
+      "余数左移后按上一步的商决定加或减除数，共得到 1 位符号 + n 位尾数。",
+      "商末位恒置 1；若最终余数与被除数异号，再加减除数校正余数。",
+    ],
+  };
+}
+
+function convertOperand(bits, encoding) {
+  const value =
+    encoding === "complement" ? complementToValue(bits) : originalToValue(bits);
+  const n = bits.length - 1;
+  const orig = valueToOriginal(value, n);
+  const comp = valueToComplement(value, n);
+  const ones = valueToOnes(value, n);
+  const steps = [
+    {
+      i: 0,
+      phase: "init",
+      judge: "输入",
+      operation: encoding === "complement" ? "按补码解读" : encoding === "original" ? "按原码解读" : "按真值二进制解读",
+      registers: [{ name: "输入", bits, point: 1 }],
+      note: `真值 = ${formatTrue(value)}`,
+      kind: "info",
+    },
+    {
+      i: 1,
+      phase: "done",
+      judge: "正数三码相同；负数：反码尾数取反，补码再 +1",
+      operation: "写出原码 / 反码 / 补码",
+      registers: [
+        { name: "原码", bits: orig, point: 1 },
+        { name: "反码", bits: ones, point: 1 },
+        { name: "补码", bits: comp, point: 1 },
+      ],
+      note:
+        bits[0] === 0
+          ? "正数：原码、反码、补码的尾数相同。"
+          : "负数：原码尾数为绝对值；反码将尾数按位取反；补码 = 反码 + 2⁻ⁿ。",
+      kind: "info",
+    },
+  ];
+  return {
+    ok: true,
+    forms: encodeForms(value, n),
+    steps,
+    algorithm: "convert",
+    algorithmTitle: "原码 · 反码 · 补码 转换",
+    ruleLines: [
+      "原码：符号位 0 正 1 负，尾数为绝对值。",
+      "反码：正数同原码；负数符号位 1，尾数按位取反。",
+      "补码：正数同原码；负数 = 反码末位加 1，或 [x]补 = 2 + x（x<0，模 2）。",
+      "补码可表示 −1（1.000…0），原码通常不能。",
+    ],
+  };
+}
+
+function formatTrue(value) {
+  if (Object.is(value, -0)) return "−0";
+  if (value === 0) return "0";
+  const sign = value < 0 ? "−" : "";
+  const abs = Math.abs(value);
+  let s = abs.toFixed(10).replace(/0+$/, "").replace(/\.$/, "");
+  if (s === "") s = "0";
+  return sign + s;
+}
+
+function runMul(algo, x, y) {
+  switch (algo) {
+    case "original-1":
+      return multiplyOriginal1(x, y);
+    case "original-2":
+      return multiplyOriginal2(x, y);
+    case "complement-1":
+      return multiplyComplement1(x, y);
+    case "complement-2":
+      return multiplyComplement2(x, y);
+  }
+}
+
+function runDiv(algo, x, y) {
+  switch (algo) {
+    case "restoring":
+      return divideRestoring(x, y);
+    case "nonrestoring":
+      return divideNonrestoring(x, y);
+    case "complement":
+      return divideComplement(x, y);
+  }
+}
+
+function toOriginalBits(parsed) {
+  if (parsed.encoding === "complement") {
+    return valueToOriginal(parsed.value, parsed.n);
+  }
+  return parsed.bits;
+}
+
+const PRESETS = [
+  {
+    id: "mul-pp",
+    label: "0.1101 × 0.1011",
+    hint: "原码一位 · 两正",
+    op: "mul",
+    encoding: "original",
+    x: "0.1101",
+    y: "0.1011",
+    n: 4,
+    mul: "original-1",
+  },
+  {
+    id: "mul-pn",
+    label: "0.1101 × (−0.1011)",
+    hint: "补码 Booth · 异号",
+    op: "mul",
+    encoding: "original",
+    x: "0.1101",
+    y: "1.1011",
+    n: 4,
+    mul: "complement-1",
+  },
+  {
+    id: "mul-booth-ycomp",
+    label: "[X]补 0.1101 × [Y]补 1.0101",
+    hint: "直接输入补码",
+    op: "mul",
+    encoding: "complement",
+    x: "0.1101",
+    y: "1.0101",
+    n: 4,
+    mul: "complement-1",
+  },
+  {
+    id: "div-rest",
+    label: "0.1011 ÷ 0.1101",
+    hint: "原码恢复余数",
+    op: "div",
+    encoding: "original",
+    x: "0.1011",
+    y: "0.1101",
+    n: 4,
+    div: "restoring",
+  },
+  {
+    id: "div-alt",
+    label: "0.1000 ÷ 0.1101",
+    hint: "加减交替",
+    op: "div",
+    encoding: "original",
+    x: "0.1000",
+    y: "0.1101",
+    n: 4,
+    div: "nonrestoring",
+  },
+  {
+    id: "div-comp",
+    label: "(−0.1001) ÷ 0.1101",
+    hint: "补码加减交替",
+    op: "div",
+    encoding: "original",
+    x: "1.1001",
+    y: "0.1101",
+    n: 4,
+    div: "complement",
+  },
+];
+    </script>
+    <script>
+      // UI layer: vanilla-DOM reimplementation of src/components/calculator.tsx,
+// src/components/bit-strip.tsx and src/components/ui/button.tsx.
+// Expects the ported logic (build/logic.js) to share this module scope.
+
+const ICONS = {
+  times:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+  divide:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M12 6h.01M12 18h.01M5 12h14"/></svg>',
+  equal:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M5 9h14M5 15h14"/></svg>',
+  minus:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M5 12h14"/></svg>',
+  plus:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  reset:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>',
+  swap:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>',
+  chevronLeft:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>',
+  chevronRight:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>',
+  copy:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>',
+  check:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+  info:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
+};
+
+const MUL_ALGOS = [
+  { id: "original-1", name: "原码一位", blurb: "符号异或 · 尾数移位加" },
+  { id: "original-2", name: "原码两位", blurb: "两位一组 · 0/|X|/2|X|/3|X|" },
+  { id: "complement-1", name: "补码一位", blurb: "Booth · 比较 yi yi+1" },
+  { id: "complement-2", name: "补码两位", blurb: "Booth-2 · 三位编码" },
+];
+
+const DIV_ALGOS = [
+  { id: "restoring", name: "原码恢复余数", blurb: "不够减则加回除数" },
+  { id: "nonrestoring", name: "原码加减交替", blurb: "不恢复 · 正减负加" },
+  { id: "complement", name: "补码加减交替", blurb: "符号参加运算 · 末位置 1" },
+];
+
+const ENCODINGS = [
+  { id: "true-bin", name: "真值", hint: "用 +0.1011 / −0.1011" },
+  { id: "original", name: "原码", hint: "0.xxxx 正 · 1.xxxx 负" },
+  { id: "complement", name: "补码", hint: "符号位参与 · 可写 −1" },
+];
+
+const OPS = [
+  { id: "mul", name: "乘法", icon: ICONS.times },
+  { id: "div", name: "除法", icon: ICONS.divide },
+  { id: "convert", name: "码制", icon: ICONS.equal },
+];
+
+const KIND_CLASS = {
+  add: "k-add",
+  sub: "k-sub",
+  shift: "k-shift",
+  correct: "k-correct",
+  zero: "k-zero",
+  info: "k-info",
+};
+
+const KIND_LABEL = {
+  add: "加",
+  sub: "减",
+  shift: "移位",
+  correct: "校正",
+  zero: "不加",
+  info: "说明",
+};
+
+const state = {
+  op: "mul",
+  encoding: "original",
+  n: 4,
+  xRaw: "0.1101",
+  yRaw: "0.1011",
+  mulAlgo: "original-1",
+  divAlgo: "restoring",
+  stepIndex: 0,
+  showAll: true,
+};
+
+const $ = (sel) => document.querySelector(sel);
+
+function el(tag, className, html) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (html !== undefined) node.innerHTML = html;
+  return node;
+}
+
+function bitsToText(bits) {
+  return bits.join("");
+}
+
+function fractionLabel(value, n) {
+  const denom = 2 ** n;
+  const num = Math.round(value * denom);
+  return `${num}/${denom}`;
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+}
+
+/* ---------------------------------------------------------------- bit strip */
+
+function bitStrip(bits, point = 1, extra, size = "md", onToggle) {
+  const wrap = el("div", `bit-strip bs-${size}`);
+  bits.forEach((bit, i) => {
+    const isSign = i < point;
+    const title = isSign ? "符号位" : `2⁻${i - point + 1}`;
+    const cls = `bit ${bit === 1 ? "bit-one" : "bit-zero"}${isSign ? " bit-sign" : ""}`;
+    const inner = `<span class="${cls}" title="${title}">${bit}</span>`;
+    const cell = el("span", "bit-cell");
+    if (onToggle) {
+      const btn = el("button", "bit-btn", inner);
+      btn.type = "button";
+      btn.setAttribute(
+        "aria-label",
+        isSign ? `翻转符号位，当前 ${bit}` : `翻转第 ${i - point + 1} 位，当前 ${bit}`,
+      );
+      btn.addEventListener("click", () => onToggle(i));
+      cell.appendChild(btn);
+    } else {
+      cell.innerHTML = inner;
+    }
+    if (i === point - 1 && i !== bits.length - 1) {
+      cell.appendChild(el("span", "bit-point", "."));
+    }
+    wrap.appendChild(cell);
+  });
+  if (extra !== undefined) {
+    wrap.appendChild(el("span", "bit-sep", "|"));
+    wrap.appendChild(
+      el("span", `bit bit-extra ${extra === 1 ? "bit-one" : ""}`, String(extra)),
+    );
+  }
+  return wrap;
+}
+
+/* -------------------------------------------------------------- derived data */
+
+function derive() {
+  const xParsed = parseOperand(state.xRaw, state.n, state.encoding);
+  const yParsed = parseOperand(state.yRaw, state.n, state.encoding);
+  const xOrig = xParsed.ok ? toOriginalBits(xParsed) : null;
+  const yOrig = yParsed.ok ? toOriginalBits(yParsed) : null;
+
+  let result = null;
+  if (xParsed.ok) {
+    if (state.op === "convert") {
+      result = convertOperand(xParsed.bits, state.encoding);
+    } else if (yParsed.ok) {
+      const xb = toOriginalBits(xParsed);
+      const yb = toOriginalBits(yParsed);
+      result =
+        state.op === "mul"
+          ? runMul(state.mulAlgo, xb, yb)
+          : runDiv(state.divAlgo, xb, yb);
+    }
+  }
+
+  let compareRows = [];
+  if (xOrig && yOrig && state.op !== "convert") {
+    compareRows = (state.op === "mul" ? MUL_ALGOS : DIV_ALGOS).map((item) => ({
+      id: item.id,
+      name: item.name,
+      result:
+        state.op === "mul"
+          ? runMul(item.id, xOrig, yOrig)
+          : runDiv(item.id, xOrig, yOrig),
+    }));
+  }
+
+  let expectedTrue = null;
+  if (xParsed.ok && yParsed.ok && state.op !== "convert") {
+    if (state.op === "mul") {
+      expectedTrue = xParsed.value * yParsed.value;
+    } else {
+      expectedTrue = yParsed.value === 0 ? null : xParsed.value / yParsed.value;
+    }
+  }
+
+  return { xParsed, yParsed, xOrig, yOrig, result, compareRows, expectedTrue };
+}
+
+/* ------------------------------------------------------------------ controls */
+
+function renderOps() {
+  const box = $("#op-tabs");
+  box.innerHTML = "";
+  OPS.forEach((item) => {
+    const btn = el(
+      "button",
+      `op-tab${state.op === item.id ? " is-active" : ""}`,
+      `${item.icon}<span>${item.name}</span>`,
+    );
+    btn.type = "button";
+    btn.addEventListener("click", () => {
+      state.op = item.id;
+      state.stepIndex = 0;
+      render();
+    });
+    box.appendChild(btn);
+  });
+}
+
+function renderEncodings() {
+  const box = $("#encoding-tabs");
+  box.innerHTML = "";
+  ENCODINGS.forEach((item) => {
+    const btn = el(
+      "button",
+      `chip${state.encoding === item.id ? " is-active" : ""}`,
+      `${item.name}输入`,
+    );
+    btn.type = "button";
+    btn.title = item.hint;
+    btn.addEventListener("click", () => {
+      state.encoding = item.id;
+      state.stepIndex = 0;
+      render();
+    });
+    box.appendChild(btn);
+  });
+  const current = ENCODINGS.find((e) => e.id === state.encoding);
+  $("#encoding-hint").innerHTML =
+    `${esc(current.hint)}。也可直接输入十进制，如 <span class="mono">0.6875</span>。`;
+}
+
+function renderAlgoGrid() {
+  const box = $("#algo-grid");
+  box.innerHTML = "";
+  if (state.op === "convert") {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  const items = state.op === "mul" ? MUL_ALGOS : DIV_ALGOS;
+  const value = state.op === "mul" ? state.mulAlgo : state.divAlgo;
+  items.forEach((item) => {
+    const active = item.id === value;
+    const btn = el(
+      "button",
+      `algo${active ? " is-active" : ""}`,
+      `<span class="algo-name">${item.name}</span><span class="algo-blurb">${item.blurb}</span>`,
+    );
+    btn.type = "button";
+    btn.addEventListener("click", () => {
+      if (state.op === "mul") state.mulAlgo = item.id;
+      else state.divAlgo = item.id;
+      state.stepIndex = 0;
+      render();
+    });
+    box.appendChild(btn);
+  });
+}
+
+function renderPresets() {
+  const box = $("#presets");
+  box.innerHTML = "";
+  PRESETS.forEach((p) => {
+    const btn = el(
+      "button",
+      "preset",
+      `<span class="preset-label">${esc(p.label)}</span><span class="preset-hint">${esc(p.hint)}</span>`,
+    );
+    btn.type = "button";
+    btn.addEventListener("click", () => {
+      state.op = p.op;
+      state.encoding = p.encoding;
+      state.n = p.n;
+      state.xRaw = p.x;
+      state.yRaw = p.y;
+      if (p.mul) state.mulAlgo = p.mul;
+      if (p.div) state.divAlgo = p.div;
+      state.stepIndex = 0;
+      state.showAll = true;
+      syncInputs();
+      render();
+    });
+    box.appendChild(btn);
+  });
+}
+
+function renderStepper() {
+  $("#n-value").textContent = String(state.n);
+}
+
+/* ------------------------------------------------------------------ operands */
+
+function operandNodes(side) {
+  return {
+    block: $(`#operand-${side}`),
+    label: $(`#label-${side}`),
+    input: $(`#input-${side}`),
+    pad: $(`#pad-${side}`),
+    forms: $(`#forms-${side}`),
+  };
+}
+
+function syncInputs() {
+  for (const side of ["x", "y"]) {
+    const { input } = operandNodes(side);
+    const next = side === "x" ? state.xRaw : state.yRaw;
+    if (input.value !== next) input.value = next;
+  }
+}
+
+function renderOperands(derived) {
+  const yVisible = state.op !== "convert";
+  $("#operand-y").hidden = !yVisible;
+  $("#swap-row").hidden = !yVisible;
+
+  const labelX = state.op === "div" ? "被除数 X" : state.op === "mul" ? "被乘数 X" : "操作数 X";
+  const labelY = state.op === "div" ? "除数 Y" : "乘数 Y";
+
+  for (const side of ["x", "y"]) {
+    const parsed = side === "x" ? derived.xParsed : derived.yParsed;
+    const nodes = operandNodes(side);
+    nodes.label.textContent = side === "x" ? labelX : labelY;
+    nodes.input.placeholder =
+      state.encoding === "true-bin" ? "−0.1011 或 0.6875" : "0.1011";
+
+    const forms = parsed.ok ? encodeForms(parsed.value, state.n) : null;
+    const padBits = parsed.ok
+      ? state.encoding === "complement"
+        ? forms.complement
+        : parsed.bits
+      : [0, ...Array(state.n).fill(0)];
+
+    nodes.pad.innerHTML = "";
+    nodes.pad.appendChild(
+      bitStrip(padBits, 1, undefined, "lg", (i) => {
+        const next = padBits.map((b, idx) => (idx === i ? b ^ 1 : b));
+        const str = bitsToInputString(next, state.encoding);
+        if (side === "x") state.xRaw = str;
+        else state.yRaw = str;
+        state.stepIndex = 0;
+        syncInputs();
+        render();
+      }),
+    );
+
+    nodes.forms.innerHTML = "";
+    if (parsed.ok && forms) {
+      nodes.forms.className = "forms-box";
+      nodes.forms.appendChild(formRow("真值", `${formatTrue(parsed.value)}  (${fractionLabel(parsed.value, state.n)})`, false));
+      nodes.forms.appendChild(formRow("原码", formatBits(forms.original), true));
+      nodes.forms.appendChild(formRow("反码", formatBits(forms.ones), true));
+      nodes.forms.appendChild(formRow("补码", formatBits(forms.complement), true));
+      if (parsed.note) {
+        nodes.forms.appendChild(el("p", "form-note", esc(parsed.note)));
+      }
+    } else {
+      nodes.forms.className = "forms-box is-error";
+      nodes.forms.appendChild(el("p", "form-error", esc(parsed.error)));
+    }
+  }
+}
+
+function formRow(key, value, mono) {
+  return el(
+    "div",
+    "form-row",
+    `<span class="form-key">${esc(key)}</span><span class="form-val${mono ? " mono" : ""}">${esc(value)}</span>`,
+  );
+}
+
+function negate(side) {
+  const parsed = side === "x" ? parseOperand(state.xRaw, state.n, state.encoding) : parseOperand(state.yRaw, state.n, state.encoding);
+  if (!parsed.ok) return;
+  const next = encodeForms(-parsed.value, state.n);
+  const bits = state.encoding === "complement" ? next.complement : next.original;
+  const str = bitsToInputString(bits, state.encoding === "complement" ? "complement" : state.encoding);
+  if (side === "x") state.xRaw = str;
+  else state.yRaw = str;
+  state.stepIndex = 0;
+  syncInputs();
+  render();
+}
+
+/* --------------------------------------------------------------- result card */
+
+function copyButton(bits) {
+  const btn = el("button", "copy-btn", ICONS.copy);
+  btn.type = "button";
+  btn.setAttribute("aria-label", "复制机器码");
+  btn.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(formatBits(bits));
+      btn.innerHTML = `<span class="copy-ok">${ICONS.check}</span>`;
+      window.setTimeout(() => {
+        btn.innerHTML = ICONS.copy;
+      }, 1200);
+    } catch {
+      /* clipboard may be blocked (file:// or embedded contexts) */
+    }
+  });
+  return btn;
+}
+
+function formLine(name, bits, bitsLabel, extra) {
+  const box = el("div", "form-line");
+  const head = el("div", "form-line-head");
+  head.appendChild(el("span", "form-line-name", esc(name)));
+  const right = el("div", "form-line-right");
+  if (extra) right.appendChild(el("span", "form-line-extra", esc(extra)));
+  if (bits) right.appendChild(copyButton(bits));
+  head.appendChild(right);
+  box.appendChild(head);
+  if (bits) {
+    const scroller = el("div", "scroll-x");
+    scroller.appendChild(bitStrip(bits));
+    scroller.appendChild(el("p", "mono form-line-text", esc(formatBits(bits))));
+    box.appendChild(scroller);
+  } else {
+    box.appendChild(el("span", "mono form-line-value", esc(bitsLabel)));
+  }
+  return box;
+}
+
+function resultCard(result, derived) {
+  const { op, expectedTrue, xParsed, yParsed, xOrig, yOrig } = {
+    op: state.op,
+    expectedTrue: derived.expectedTrue,
+    xParsed: derived.xParsed,
+    yParsed: derived.yParsed,
+    xOrig: derived.xOrig,
+    yOrig: derived.yOrig,
+  };
+  const card = el("div", "card");
+  const title = op === "div" ? "商" : op === "mul" ? "乘积" : "机器码";
+  const machine = result.forms.value;
+  const ulp = 2 ** -result.forms.n;
+  const matches =
+    expectedTrue !== null && Number.isFinite(expectedTrue)
+      ? Math.abs(machine - expectedTrue) < ulp + 1e-12
+      : null;
+  const symbol = op === "div" ? "÷" : "×";
+
+  card.appendChild(el("p", "card-eyebrow", esc(result.algorithmTitle)));
+  card.appendChild(el("h2", "card-title", title));
+
+  if (op !== "convert") {
+    const box = el("div", "truth-box");
+    const xValue = xParsed.ok ? xParsed.value : 0;
+    const yValue = yParsed.ok ? yParsed.value : 0;
+    box.appendChild(
+      el(
+        "p",
+        "mono truth-line",
+        `${esc(formatTrue(xValue))} ${symbol} ${esc(formatTrue(yValue))}${expectedTrue !== null ? ` = ${esc(formatTrue(expectedTrue))}` : ""}`,
+      ),
+    );
+    box.appendChild(
+      el(
+        "p",
+        "truth-note",
+        "真值验算" +
+          (matches === true
+            ? " · 与机器结果一致"
+            : matches === false
+              ? " · 与 n 位量化后的机器结果有末位差"
+              : ""),
+      ),
+    );
+    if (xOrig && yOrig) {
+      box.appendChild(
+        el(
+          "p",
+          "mono truth-code",
+          `[X]原 ${esc(formatBits(xOrig))} ${symbol} [Y]原 ${esc(formatBits(yOrig))}`,
+        ),
+      );
+    }
+    card.appendChild(box);
+  }
+
+  const forms = el("div", "card-forms");
+  forms.appendChild(formLine("真值", null, formatTrue(result.forms.value), fractionLabel(result.forms.value, result.forms.n)));
+  forms.appendChild(formLine("原码", result.forms.original));
+  forms.appendChild(formLine("反码", result.forms.ones));
+  forms.appendChild(formLine("补码", result.forms.complement));
+  card.appendChild(forms);
+
+  if (result.remainder && op === "div") {
+    const rem = el("div", "card-remainder");
+    rem.appendChild(el("p", "card-remainder-title", "余数（权值 2⁻²ⁿ）"));
+    rem.appendChild(
+      formLine("真值", null, formatTrue(result.remainder.value), fractionLabel(result.remainder.value, result.remainder.n)),
+    );
+    rem.appendChild(formLine("原码", result.remainder.original));
+    card.appendChild(rem);
+  }
+
+  return card;
+}
+
+/* -------------------------------------------------------------- compare table */
+
+function compareTable(rows) {
+  const card = el("div", "card");
+  card.appendChild(
+    el("p", "compare-title", state.op === "mul" ? "原码 / 补码乘法对照" : "原码 / 补码除法对照"),
+  );
+  card.appendChild(
+    el(
+      "p",
+      "compare-note",
+      "点选一行查看该算法的逐步寄存器轨迹。真值应彼此一致（补码除法末位恒置 1，可能差 1 ULP）。",
+    ),
+  );
+  const scroller = el("div", "scroll-x");
+  const table = el("table", "compare-table");
+  table.innerHTML =
+    "<thead><tr><th>算法</th><th>原码</th><th>补码</th><th>真值</th></tr></thead>";
+  const tbody = el("tbody");
+  const selected = state.op === "mul" ? state.mulAlgo : state.divAlgo;
+  rows.forEach((row) => {
+    const ok = row.result.ok;
+    const active = row.id === selected;
+    const tr = el("tr", active ? "is-active" : "");
+    tr.appendChild(el("td", "", `<span class="row-name${active ? " is-active" : ""}">${esc(row.name)}</span>`));
+    tr.appendChild(el("td", "mono", ok ? esc(formatBits(row.result.forms.original)) : esc(row.result.error)));
+    tr.appendChild(el("td", "mono", ok ? esc(formatBits(row.result.forms.complement)) : "—"));
+    tr.appendChild(el("td", "mono", ok ? esc(formatTrue(row.result.forms.value)) : "—"));
+    if (ok) {
+      tr.addEventListener("click", () => {
+        if (state.op === "mul") state.mulAlgo = row.id;
+        else state.divAlgo = row.id;
+        state.stepIndex = 0;
+        render();
+      });
+    }
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  scroller.appendChild(table);
+  card.appendChild(scroller);
+  return card;
+}
+
+/* ------------------------------------------------------------ paper multiply */
+
+function paperMulCard(x, y, product) {
+  const card = el("div", "card");
+  card.appendChild(el("p", "compare-title", "原码尾数竖式"));
+  const ps = x[0] ^ y[0];
+  card.appendChild(
+    el(
+      "p",
+      "compare-note",
+      `符号单独算：Ps = ${x[0]} ⊕ ${y[0]} = ${ps}。下面只乘绝对值。`,
+    ),
+  );
+  const scroller = el("div", "scroll-x mono paper");
+  const inner = el("div", "paper-inner");
+  inner.appendChild(paperLine(x.slice(1), "|X|", false, false));
+  inner.appendChild(paperLine(y.slice(1), "× |Y|", false, false));
+  inner.appendChild(el("span", "paper-rule"));
+  paperMulRows(x, y).forEach((row) => {
+    inner.appendChild(
+      paperLine(row.line, row.bit === 1 ? `y×2⁻${row.shift + 1}` : "×0", row.bit === 0, false),
+    );
+  });
+  inner.appendChild(el("span", "paper-rule"));
+  if (product) {
+    inner.appendChild(paperLine(product.slice(1), `[P]原 ${ps}.`, false, true));
+  }
+  scroller.appendChild(inner);
+  card.appendChild(scroller);
+  return card;
+}
+
+function paperLine(bits, prefix, dim, emphasize) {
+  const row = el("div", `paper-line${dim ? " is-dim" : ""}`);
+  row.appendChild(el("span", "paper-prefix", esc(prefix)));
+  row.appendChild(el("span", `paper-bits${emphasize ? " is-strong" : ""}`, esc(bitsToText(bits))));
+  return row;
+}
+
+/* ------------------------------------------------------------------ steps */
+
+function stepsSection(result) {
+  const section = el("section", "card steps-card");
+  const stepCount = result.steps.length;
+  const safeIndex = Math.min(state.stepIndex, Math.max(0, stepCount - 1));
+  const visible = state.showAll ? result.steps : result.steps.slice(0, safeIndex + 1);
+
+  const head = el("div", "steps-head");
+  const left = el("div");
+  left.appendChild(el("h2", "steps-title", "逐步演算"));
+  left.appendChild(
+    el(
+      "p",
+      "steps-meta",
+      `共 ${stepCount} 步 · ${state.showAll ? "全部展开" : `看到第 ${safeIndex + 1} 步`}`,
+    ),
+  );
+  head.appendChild(left);
+
+  const tools = el("div", "steps-tools");
+  const toggle = el(
+    "button",
+    `btn btn-sm ${state.showAll ? "btn-primary" : "btn-secondary"}`,
+    state.showAll ? "改为逐步" : "一次展开",
+  );
+  toggle.type = "button";
+  toggle.addEventListener("click", () => {
+    state.showAll = !state.showAll;
+    render();
+  });
+  tools.appendChild(toggle);
+
+  if (!state.showAll) {
+    const prev = el("button", "btn btn-secondary btn-icon", ICONS.chevronLeft);
+    prev.type = "button";
+    prev.setAttribute("aria-label", "上一步");
+    prev.disabled = safeIndex === 0;
+    prev.addEventListener("click", () => {
+      state.stepIndex = Math.max(0, state.stepIndex - 1);
+      render();
+    });
+    const next = el("button", "btn btn-secondary btn-icon", ICONS.chevronRight);
+    next.type = "button";
+    next.setAttribute("aria-label", "下一步");
+    next.disabled = safeIndex >= stepCount - 1;
+    next.addEventListener("click", () => {
+      state.stepIndex = Math.min(stepCount - 1, state.stepIndex + 1);
+      render();
+    });
+    tools.appendChild(prev);
+    tools.appendChild(next);
+  }
+  head.appendChild(tools);
+  section.appendChild(head);
+
+  const list = el("div", "steps-list");
+  visible.forEach((step, idx) => {
+    const active = !state.showAll && idx === visible.length - 1;
+    const article = el("article", `step${active ? " is-active" : ""}`);
+    const meta = el("div", "step-meta");
+    meta.appendChild(
+      el(
+        "span",
+        "mono step-phase",
+        step.phase === "init" ? "初值" : step.phase === "done" ? "结果" : `步 ${step.i}`,
+      ),
+    );
+    meta.appendChild(
+      el("span", `kind ${KIND_CLASS[step.kind] ?? "k-info"}`, KIND_LABEL[step.kind] ?? step.kind),
+    );
+    meta.appendChild(el("span", "mono step-op", esc(step.operation)));
+    if (step.judge !== "—") meta.appendChild(el("span", "step-judge", esc(step.judge)));
+    article.appendChild(meta);
+    article.appendChild(el("p", "step-note", esc(step.note)));
+
+    const regs = el("div", "step-regs");
+    step.registers.forEach((reg) => {
+      const row = el("div", "step-reg");
+      row.appendChild(el("span", "mono step-reg-name", esc(reg.name)));
+      row.appendChild(bitStrip(reg.bits, reg.point, reg.extra, "sm"));
+      regs.appendChild(row);
+    });
+    article.appendChild(regs);
+    list.appendChild(article);
+  });
+  section.appendChild(list);
+  return section;
+}
+
+/* -------------------------------------------------------------------- render */
+
+function render() {
+  const derived = derive();
+  renderStepper();
+  renderOps();
+  renderEncodings();
+  renderAlgoGrid();
+  renderOperands(derived);
+
+  const right = $("#right-col");
+  right.innerHTML = "";
+
+  const result = derived.result;
+  if (result && result.ok) {
+    right.appendChild(resultCard(result, derived));
+  } else {
+    const card = el("div", "card");
+    const message = !derived.xParsed.ok
+      ? derived.xParsed.error
+      : state.op !== "convert" && !derived.yParsed.ok
+        ? derived.yParsed.error
+        : (result && result.error) || "填写操作数后自动演算。";
+    card.appendChild(el("p", "empty-note", esc(message)));
+    right.appendChild(card);
+  }
+
+  if (result && result.warning) {
+    right.appendChild(el("p", "warning", esc(result.warning)));
+  }
+
+  if (derived.compareRows.length) {
+    right.appendChild(compareTable(derived.compareRows));
+  }
+
+  if (
+    state.op === "mul" &&
+    derived.xOrig &&
+    derived.yOrig &&
+    (state.mulAlgo === "original-1" || state.mulAlgo === "original-2")
+  ) {
+    right.appendChild(
+      paperMulCard(derived.xOrig, derived.yOrig, result && result.ok ? result.forms.original : null),
+    );
+  }
+
+  if (result && result.ok && result.ruleLines.length) {
+    const aside = el("aside", "card rules-card");
+    aside.appendChild(el("div", "rules-head", `${ICONS.info}<span>${esc(result.algorithmTitle)} · 规则</span>`));
+    const ol = el("ol", "rules-list");
+    result.ruleLines.forEach((line) => {
+      ol.appendChild(el("li", "", `<span class="rule-dot"></span><span>${esc(line)}</span>`));
+    });
+    aside.appendChild(ol);
+    right.appendChild(aside);
+  }
+
+  const stepsHost = $("#steps-host");
+  stepsHost.innerHTML = "";
+  if (result && result.ok && result.steps.length) {
+    stepsHost.appendChild(stepsSection(result));
+  }
+}
+
+/* ---------------------------------------------------------------------- init */
+
+function changeN(delta) {
+  const nn = clampN(state.n + delta);
+  if (nn === state.n) return;
+  // Parse against the NEW width, so the operand string is padded / truncated
+  // to the new n (matches the original changeN).
+  const xp = parseOperand(state.xRaw, nn, state.encoding);
+  const yp = parseOperand(state.yRaw, nn, state.encoding);
+  state.n = nn;
+  if (xp.ok) {
+    const bits = state.encoding === "complement" ? encodeForms(xp.value, nn).complement : xp.bits;
+    state.xRaw = bitsToInputString(bits, state.encoding);
+  }
+  if (yp.ok) {
+    const bits = state.encoding === "complement" ? encodeForms(yp.value, nn).complement : yp.bits;
+    state.yRaw = bitsToInputString(bits, state.encoding);
+  }
+  state.stepIndex = 0;
+  syncInputs();
+  render();
+}
+
+function reset() {
+  state.op = "mul";
+  state.encoding = "original";
+  state.n = 4;
+  state.xRaw = "0.1101";
+  state.yRaw = "0.1011";
+  state.mulAlgo = "original-1";
+  state.divAlgo = "restoring";
+  state.stepIndex = 0;
+  state.showAll = true;
+  syncInputs();
+  render();
+}
+
+function init() {
+  $("#n-dec").addEventListener("click", () => changeN(-1));
+  $("#n-inc").addEventListener("click", () => changeN(1));
+  $("#n-dec").innerHTML = ICONS.minus;
+  $("#n-inc").innerHTML = ICONS.plus;
+  $("#reset").innerHTML = ICONS.reset;
+  $("#reset").addEventListener("click", reset);
+  $("#swap").innerHTML = `${ICONS.swap}<span>交换 X / Y</span>`;
+  $("#swap").addEventListener("click", () => {
+    const tmp = state.xRaw;
+    state.xRaw = state.yRaw;
+    state.yRaw = tmp;
+    state.stepIndex = 0;
+    syncInputs();
+    render();
+  });
+
+  for (const side of ["x", "y"]) {
+    const { input } = operandNodes(side);
+    input.addEventListener("input", () => {
+      if (side === "x") state.xRaw = input.value;
+      else state.yRaw = input.value;
+      state.stepIndex = 0;
+      render();
+    });
+  }
+  document.querySelectorAll("[data-negate]").forEach((btn) => {
+    btn.addEventListener("click", () => negate(btn.getAttribute("data-negate")));
+  });
+
+  renderPresets();
+  syncInputs();
+  render();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  init();
+}
+    </script>
+  </body>
+</html>
